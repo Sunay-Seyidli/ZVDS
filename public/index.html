@@ -826,12 +826,13 @@
             <span class="text-[11px] text-slate-400">Örnekler:</span>
             <select id="media-sample-selector" class="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none focus:border-rose-500 transition-colors">
               <option value="">-- Örnek Medya Seçin --</option>
-              <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4">🎬 Big Buck Bunny (Full HD MP4)</option>
-              <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4">🐘 Elephants Dream (HD Film)</option>
-              <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4">🔥 60 FPS Ultra HD Demo (MP4)</option>
-              <option value="https://media.giphy.com/media/unQ3IJU2RG7DO/giphy.gif">💻 Retro Hacker Matrix (Animasyonlu GIF)</option>
-              <option value="https://media.giphy.com/media/L1R1tvI9svkIWwpVYr/giphy.gif">🌆 Cyberpunk Synthwave Neon (GIF)</option>
-              <option value="https://media.giphy.com/media/3o7TKTDnUxE0gpnY08/giphy.gif">🌌 Galaxy Space Loop (Animasyonlu GIF)</option>
+              <option value="https://www.youtube.com/watch?v=jfKfPfyJRdk">🔴 YouTube: Lofi Hip Hop Radyosu (Canlı)</option>
+              <option value="https://www.youtube.com/watch?v=aqz-KE-bpKQ">🎬 YouTube: Big Buck Bunny 4K 60FPS</option>
+              <option value="https://www.youtube.com/watch?v=1La4QzGeaaQ">🌆 YouTube: Synthwave Chill Beats</option>
+              <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4">🎥 Yerel MP4: Big Buck Bunny (HD)</option>
+              <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4">🔥 Yerel MP4: 60 FPS Ultra HD Demo</option>
+              <option value="https://media.giphy.com/media/unQ3IJU2RG7DO/giphy.gif">💻 GIF: Retro Hacker Matrix Loop</option>
+              <option value="https://media.giphy.com/media/L1R1tvI9svkIWwpVYr/giphy.gif">✨ GIF: Cyberpunk Synthwave Neon</option>
             </select>
           </div>
         </div>
@@ -839,6 +840,9 @@
         <!-- Main Display Canvas / Player Area -->
         <div id="media-display-container" class="relative flex-1 bg-black flex items-center justify-center overflow-hidden group">
           
+          <!-- YouTube Video Player (Iframe Embed) -->
+          <iframe id="media-youtube-iframe" class="hidden w-full h-full border-0 absolute inset-0 z-10" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+
           <!-- HTML5 Video Player -->
           <video id="media-video-element" class="w-full h-full object-contain" playsinline preload="auto"></video>
 
@@ -861,9 +865,9 @@
             <div class="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 text-3xl mb-3">
               <i class="fa-solid fa-film"></i>
             </div>
-            <h3 class="text-sm font-bold text-slate-200">Video, GIF veya Ses Dosyası Seçin</h3>
-            <p class="text-xs text-slate-400 mt-1 max-w-sm">
-              Dosya Yöneticisi'nden herhangi bir <code class="text-rose-400">.mp4, .webm, .gif, .mp3</code> dosyasına çift tıklayın, yukarıdaki <b>Dosya Aç</b> butonunu kullanın veya dosyayı buraya sürükleyip bırakın.
+            <h3 class="text-sm font-bold text-slate-200">YouTube, Video, GIF veya Ses Seçin</h3>
+            <p class="text-xs text-slate-400 mt-1 max-w-md">
+              <b class="text-rose-400">URL'den Oynat</b> butonuna tıklayarak YouTube linki (<code class="text-sky-400">youtube.com/watch?v=...</code> veya <code class="text-sky-400">youtu.be/...</code>) yapıştırabilir, Dosya Yöneticisi'nden dosya açabilir veya sürükleyip bırakabilirsiniz.
             </p>
           </div>
 
