@@ -112,12 +112,20 @@
         <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-teal-300">Yazılım Yöneticisi</span>
       </div>
 
+      <!-- Media & Video Player Icon -->
+      <div class="desktop-icon pointer-events-auto group flex flex-col items-center cursor-pointer p-2 rounded-xl hover:bg-slate-800/40 transition-all duration-200" data-app="media">
+        <div class="w-14 h-14 bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-rose-400 group-hover:shadow-rose-500/20 transition-all duration-200">
+          <i class="fa-solid fa-circle-play text-2xl text-rose-400"></i>
+        </div>
+        <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-rose-300">Video & Medya</span>
+      </div>
+
       <!-- Settings Icon -->
       <div class="desktop-icon pointer-events-auto group flex flex-col items-center cursor-pointer p-2 rounded-xl hover:bg-slate-800/40 transition-all duration-200" data-app="settings">
-        <div class="w-14 h-14 bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-rose-400 group-hover:shadow-rose-500/20 transition-all duration-200">
-          <i class="fa-solid fa-gear text-2xl text-rose-400"></i>
+        <div class="w-14 h-14 bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-purple-400 group-hover:shadow-purple-500/20 transition-all duration-200">
+          <i class="fa-solid fa-gear text-2xl text-purple-400"></i>
         </div>
-        <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-rose-300">Ayarlar</span>
+        <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-purple-300">Ayarlar</span>
       </div>
     </main>
 
@@ -164,9 +172,16 @@
           <span>Sistem Kaynak Monitörü</span>
         </button>
 
-        <button class="menu-app-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800/80 hover:text-rose-400 transition-colors group" data-app="settings">
+        <button class="menu-app-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800/80 hover:text-rose-400 transition-colors group" data-app="media">
           <div class="w-7 h-7 rounded-lg bg-rose-950/60 border border-rose-800/50 flex items-center justify-center group-hover:scale-110 transition-transform">
-            <i class="fa-solid fa-sliders text-rose-400"></i>
+            <i class="fa-solid fa-circle-play text-rose-400"></i>
+          </div>
+          <span>Medya & Video Oynatıcı (GIF / MP4)</span>
+        </button>
+
+        <button class="menu-app-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800/80 hover:text-purple-400 transition-colors group" data-app="settings">
+          <div class="w-7 h-7 rounded-lg bg-purple-950/60 border border-purple-800/50 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-sliders text-purple-400"></i>
           </div>
           <span>Masaüstü & Tema Ayarları</span>
         </button>
@@ -770,6 +785,166 @@
         <div class="resize-handle handle-br"></div>
       </div>
 
+      <!-- 8. VIDEO & MEDIA PLAYER WINDOW (MP4 / WEBM / GIF / STREAM) -->
+      <div id="win-media" class="window hidden absolute top-12 left-1/2 -translate-x-1/2 w-[780px] h-[540px] max-w-[96vw] max-h-[88vh] bg-slate-950/95 border border-slate-700/80 backdrop-blur-2xl rounded-2xl shadow-2xl flex flex-col overflow-hidden pointer-events-auto">
+        <!-- Title Bar -->
+        <div class="window-header h-10 bg-slate-900/90 border-b border-slate-800/90 px-3 flex items-center justify-between cursor-move select-none">
+          <div class="flex items-center space-x-2.5">
+            <i class="fa-solid fa-circle-play text-rose-400 text-sm"></i>
+            <span class="text-xs font-semibold text-slate-200">Video & Medya Oynatıcı</span>
+            <span id="media-type-badge" class="text-[10px] font-mono uppercase bg-rose-950/80 text-rose-300 border border-rose-800/60 px-2 py-0.5 rounded-full">
+              Hazır
+            </span>
+            <span id="media-filename" class="text-[11px] text-slate-400 font-mono truncate max-w-[220px]">
+              Hiçbir medya seçilmedi
+            </span>
+          </div>
+          <div class="flex items-center space-x-1.5 window-controls">
+            <button class="win-btn-minimize w-3 h-3 rounded-full bg-amber-500/80 hover:bg-amber-400 transition-colors" title="Simge Durumuna Küçült"></button>
+            <button class="win-btn-maximize w-3 h-3 rounded-full bg-emerald-500/80 hover:bg-emerald-400 transition-colors" title="Ekranı Kapla"></button>
+            <button class="win-btn-close w-3 h-3 rounded-full bg-rose-500/80 hover:bg-rose-400 transition-colors" title="Kapat"></button>
+          </div>
+        </div>
+
+        <!-- Top Media Action Bar -->
+        <div class="bg-slate-900/80 border-b border-slate-800/80 px-3 py-1.5 flex flex-wrap items-center justify-between gap-2 text-xs">
+          <!-- File & Stream Actions -->
+          <div class="flex items-center space-x-2">
+            <input type="file" id="media-file-input" class="hidden" accept="video/*,image/gif,image/*,audio/*" />
+            <button id="media-btn-open-file" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors flex items-center space-x-1.5 shadow-sm">
+              <i class="fa-solid fa-folder-open text-amber-400"></i>
+              <span>Dosya Aç</span>
+            </button>
+            <button id="media-btn-url-stream" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors flex items-center space-x-1.5 shadow-sm">
+              <i class="fa-solid fa-link text-sky-400"></i>
+              <span>URL'den Oynat</span>
+            </button>
+          </div>
+
+          <!-- Samples Quick Dropdown -->
+          <div class="flex items-center space-x-2">
+            <span class="text-[11px] text-slate-400">Örnekler:</span>
+            <select id="media-sample-selector" class="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none focus:border-rose-500 transition-colors">
+              <option value="">-- Örnek Medya Seçin --</option>
+              <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4">🎬 Big Buck Bunny (Full HD MP4)</option>
+              <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4">🐘 Elephants Dream (HD Film)</option>
+              <option value="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4">🔥 60 FPS Ultra HD Demo (MP4)</option>
+              <option value="https://media.giphy.com/media/unQ3IJU2RG7DO/giphy.gif">💻 Retro Hacker Matrix (Animasyonlu GIF)</option>
+              <option value="https://media.giphy.com/media/L1R1tvI9svkIWwpVYr/giphy.gif">🌆 Cyberpunk Synthwave Neon (GIF)</option>
+              <option value="https://media.giphy.com/media/3o7TKTDnUxE0gpnY08/giphy.gif">🌌 Galaxy Space Loop (Animasyonlu GIF)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Main Display Canvas / Player Area -->
+        <div id="media-display-container" class="relative flex-1 bg-black flex items-center justify-center overflow-hidden group">
+          
+          <!-- HTML5 Video Player -->
+          <video id="media-video-element" class="w-full h-full object-contain" playsinline preload="auto"></video>
+
+          <!-- GIF / Image Viewer -->
+          <img id="media-gif-element" class="hidden w-full h-full object-contain" alt="GIF Oynatıcı" />
+
+          <!-- Audio Wave Visualizer View (for sound files) -->
+          <div id="media-audio-visualizer" class="hidden flex flex-col items-center justify-center space-y-4 p-8 text-center">
+            <div class="w-24 h-24 rounded-3xl bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-400 text-4xl shadow-xl animate-pulse">
+              <i class="fa-solid fa-music"></i>
+            </div>
+            <div>
+              <h3 id="media-audio-title" class="text-sm font-bold text-slate-100">Ses Parçası Oynatılıyor</h3>
+              <p class="text-xs text-slate-400 mt-1">Yüksek Kaliteli Ses Çözücü</p>
+            </div>
+          </div>
+
+          <!-- Empty State / Dropzone -->
+          <div id="media-empty-state" class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-slate-950/80 backdrop-blur-sm transition-opacity">
+            <div class="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/30 flex items-center justify-center text-rose-400 text-3xl mb-3">
+              <i class="fa-solid fa-film"></i>
+            </div>
+            <h3 class="text-sm font-bold text-slate-200">Video, GIF veya Ses Dosyası Seçin</h3>
+            <p class="text-xs text-slate-400 mt-1 max-w-sm">
+              Dosya Yöneticisi'nden herhangi bir <code class="text-rose-400">.mp4, .webm, .gif, .mp3</code> dosyasına çift tıklayın, yukarıdaki <b>Dosya Aç</b> butonunu kullanın veya dosyayı buraya sürükleyip bırakın.
+            </p>
+          </div>
+
+          <!-- Center Big Play Button Overlay on Hover/Pause -->
+          <button id="media-big-play-btn" class="hidden absolute w-16 h-16 rounded-full bg-rose-600/90 text-white flex items-center justify-center text-2xl shadow-2xl hover:scale-110 hover:bg-rose-500 transition-all z-20">
+            <i class="fa-solid fa-play ml-1"></i>
+          </button>
+        </div>
+
+        <!-- Custom Video/GIF Control Bar -->
+        <div id="media-controls-bar" class="bg-slate-900/95 border-t border-slate-800/90 p-2.5 flex flex-col space-y-2 select-none z-20">
+          <!-- Seek Timeline Bar -->
+          <div class="relative flex items-center group cursor-pointer w-full">
+            <input type="range" id="media-timeline-slider" min="0" max="100" value="0" step="0.1" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-rose-500 transition-all hover:h-2" />
+          </div>
+
+          <!-- Control Buttons Row -->
+          <div class="flex items-center justify-between text-xs text-slate-300">
+            <!-- Left Controls: Play, Rewind, Forward, Time, Loop -->
+            <div class="flex items-center space-x-3">
+              <button id="media-btn-play" class="w-8 h-8 rounded-lg bg-rose-600 hover:bg-rose-500 text-white flex items-center justify-center shadow transition-transform active:scale-95" title="Oynat / Duraklat (Space)">
+                <i class="fa-solid fa-play text-xs"></i>
+              </button>
+              
+              <button id="media-btn-rewind" class="p-1.5 hover:text-white transition-colors" title="5 Saniye Geri (←)">
+                <i class="fa-solid fa-backward-step"></i>
+              </button>
+
+              <button id="media-btn-forward" class="p-1.5 hover:text-white transition-colors" title="5 Saniye İleri (→)">
+                <i class="fa-solid fa-forward-step"></i>
+              </button>
+
+              <!-- Time display -->
+              <div class="font-mono text-[11px] text-slate-400 pl-1">
+                <span id="media-time-current" class="text-slate-200">00:00</span> / <span id="media-time-duration">00:00</span>
+              </div>
+
+              <!-- Loop Toggle Button -->
+              <button id="media-btn-loop" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-rose-400 rounded text-[11px] font-medium transition-colors flex items-center space-x-1" title="Sürekli Döngü (GIF ve Loop Videolar için)">
+                <i class="fa-solid fa-repeat text-[10px]"></i>
+                <span id="media-loop-label">Döngü: Açık</span>
+              </button>
+            </div>
+
+            <!-- Right Controls: Speed, Volume, PiP, Fullscreen -->
+            <div class="flex items-center space-x-3">
+              <!-- Playback Speed -->
+              <select id="media-speed-select" class="bg-slate-950 border border-slate-700 text-slate-300 text-[11px] rounded px-1.5 py-0.5 outline-none focus:border-rose-500">
+                <option value="0.5">0.5x</option>
+                <option value="1.0" selected>1.0x (Normal)</option>
+                <option value="1.25">1.25x</option>
+                <option value="1.5">1.5x</option>
+                <option value="2.0">2.0x (Hızlı)</option>
+              </select>
+
+              <!-- Volume Slider -->
+              <div class="flex items-center space-x-1.5">
+                <button id="media-btn-mute" class="p-1 text-slate-400 hover:text-white transition-colors" title="Sessiz">
+                  <i id="media-volume-icon" class="fa-solid fa-volume-high"></i>
+                </button>
+                <input type="range" id="media-volume-slider" min="0" max="1" step="0.05" value="1" class="w-16 h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-rose-500" />
+              </div>
+
+              <!-- Picture-in-Picture -->
+              <button id="media-btn-pip" class="p-1.5 hover:text-white transition-colors text-slate-400 hover:text-rose-400" title="Resim İçinde Resim (PiP)">
+                <i class="fa-solid fa-clone"></i>
+              </button>
+
+              <!-- Fullscreen Window -->
+              <button id="media-btn-fullscreen" class="p-1.5 hover:text-white transition-colors text-slate-400 hover:text-rose-400" title="Tam Ekran">
+                <i class="fa-solid fa-expand"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="resize-handle handle-r"></div>
+        <div class="resize-handle handle-b"></div>
+        <div class="resize-handle handle-br"></div>
+      </div>
+
     </div>
 
     <!-- BOTTOM TASKBAR & DOCK -->
@@ -814,6 +989,10 @@
       <button class="ctx-item w-full text-left px-3 py-2 hover:bg-sky-600 hover:text-white flex items-center space-x-2" id="ctx-file-open">
         <i class="fa-solid fa-folder-open text-sky-400 w-4"></i>
         <span>Aç</span>
+      </button>
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-rose-600 hover:text-white flex items-center space-x-2 text-rose-400 hover:text-white" id="ctx-file-media">
+        <i class="fa-solid fa-circle-play w-4"></i>
+        <span>Medya Oynatıcı ile Oynat</span>
       </button>
       <button class="ctx-item w-full text-left px-3 py-2 hover:bg-sky-600 hover:text-white flex items-center space-x-2" id="ctx-file-wine">
         <i class="fa-brands fa-windows text-indigo-400 w-4"></i>

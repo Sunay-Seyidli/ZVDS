@@ -523,6 +523,89 @@ app.get('/api/fs/download', (req, res) => {
   }
 });
 
+// Stream media file with HTTP 206 Range support for video, audio & GIF playback
+app.get('/api/fs/stream', (req, res) => {
+  try {
+    const rawFile = req.query.file;
+    if (!rawFile) {
+      return res.status(400).send('Dosya parametresi eksik');
+    }
+
+    const filePath = getSafePath(rawFile);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send('Medya dosyası bulunamadı');
+    }
+
+    const stat = fs.statSync(filePath);
+    if (stat.isDirectory()) {
+      return res.status(400).send('Klasörler oynatılamaz');
+    }
+
+    const fileSize = stat.size;
+    const ext = path.extname(filePath).toLowerCase();
+
+    // Map MIME Types
+    const mimeTypes = {
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.ogg': 'video/ogg',
+      '.ogv': 'video/ogg',
+      '.mkv': 'video/x-matroska',
+      '.mov': 'video/quicktime',
+      '.avi': 'video/x-msvideo',
+      '.gif': 'image/gif',
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.webp': 'image/webp',
+      '.svg': 'image/svg+xml',
+      '.mp3': 'audio/mpeg',
+      '.wav': 'audio/wav',
+      '.aac': 'audio/aac',
+      '.m4a': 'audio/mp4',
+      '.flac': 'audio/flac'
+    };
+
+    const contentType = mimeTypes[ext] || 'application/octet-stream';
+    const range = req.headers.range;
+
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+
+      if (start >= fileSize) {
+        res.status(416).send(`Requested range not satisfiable\n${start} >= ${fileSize}`);
+        return;
+      }
+
+      const chunksize = (end - start) + 1;
+      const file = fs.createReadStream(filePath, { start, end });
+      const head = {
+        'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+        'Accept-Ranges': 'bytes',
+        'Content-Length': chunksize,
+        'Content-Type': contentType,
+      };
+
+      res.writeHead(206, head);
+      file.pipe(res);
+    } else {
+      const head = {
+        'Content-Length': fileSize,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes'
+      };
+      res.writeHead(200, head);
+      fs.createReadStream(filePath).pipe(res);
+    }
+  } catch (err) {
+    if (!res.headersSent) {
+      res.status(500).send('Medya akışı hatası: ' + err.message);
+    }
+  }
+});
+
 // ==========================================
 // 3. VDS EXECUTION APIs (Google Chrome & Wine .exe)
 // ==========================================

@@ -19,7 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
     monitor: { title: 'Sistem Monitörü', icon: 'fa-chart-pie', color: 'text-purple-400', el: document.getElementById('win-monitor') },
     chrome: { title: 'Google Chrome', icon: 'fa-chrome', color: 'text-blue-400', el: document.getElementById('win-chrome') },
     software: { title: 'Yazılım Yöneticisi', icon: 'fa-box-open', color: 'text-teal-400', el: document.getElementById('win-software') },
-    settings: { title: 'Ayarlar', icon: 'fa-sliders', color: 'text-rose-400', el: document.getElementById('win-settings') }
+    media: { title: 'Video & Medya Oynatıcı', icon: 'fa-circle-play', color: 'text-rose-400', el: document.getElementById('win-media') },
+    settings: { title: 'Ayarlar', icon: 'fa-sliders', color: 'text-purple-400', el: document.getElementById('win-settings') }
   };
 
   // ==========================================
@@ -607,6 +608,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  document.getElementById('ctx-file-media')?.addEventListener('click', () => {
+    hideContextMenus();
+    if (selectedFileItem && !selectedFileItem.isDirectory) {
+      const ext = (selectedFileItem.extension || '').toLowerCase();
+      openMediaSource(`/api/fs/stream?file=${encodeURIComponent(selectedFileItem.path)}`, selectedFileItem.name, ext);
+    }
+  });
+
   document.getElementById('ctx-file-download')?.addEventListener('click', () => {
     hideContextMenus();
     if (selectedFileItem) {
@@ -846,13 +855,16 @@ document.addEventListener('DOMContentLoaded', () => {
       if (item.isDirectory) {
         iconClass = 'fa-folder text-amber-400';
       } else {
-        const ext = item.extension;
-        if (['.js', '.ts', '.jsx', '.tsx', '.json'].includes(ext)) iconClass = 'fa-file-code text-emerald-400';
+        const ext = (item.extension || '').toLowerCase();
+        if (['.mp4', '.webm', '.mkv', '.avi', '.mov', '.ogv'].includes(ext)) iconClass = 'fa-file-video text-rose-400';
+        else if (['.gif'].includes(ext)) iconClass = 'fa-file-image text-pink-400';
+        else if (['.png', '.jpg', '.jpeg', '.webp', '.svg'].includes(ext)) iconClass = 'fa-file-image text-purple-400';
+        else if (['.mp3', '.wav', '.ogg', '.aac', '.m4a', '.flac'].includes(ext)) iconClass = 'fa-file-audio text-amber-400';
+        else if (['.js', '.ts', '.jsx', '.tsx', '.json'].includes(ext)) iconClass = 'fa-file-code text-emerald-400';
         else if (['.html', '.css'].includes(ext)) iconClass = 'fa-file-lines text-sky-400';
-        else if (['.png', '.jpg', '.svg', '.gif'].includes(ext)) iconClass = 'fa-file-image text-purple-400';
         else if (ext === '.exe') iconClass = 'fa-brands fa-windows text-indigo-400';
         else if (ext === '.deb') iconClass = 'fa-box-archive text-teal-400';
-        else if (ext === '.md' || ext === '.txt') iconClass = 'fa-file-lines text-slate-300';
+        else if (ext === '.md' || ext === '.txt' || ext === '.log') iconClass = 'fa-file-lines text-slate-300';
       }
 
       card.innerHTML = `
@@ -863,12 +875,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Double click to open
       card.addEventListener('dblclick', () => {
+        const ext = (item.extension || '').toLowerCase();
         if (item.isDirectory) {
           loadDirectory(item.path);
         } else if (item.extension === '.exe') {
           launchWineExe(item.path);
         } else if (item.extension === '.deb') {
           installDebPackage(item.path);
+        } else if (['.mp4', '.webm', '.mkv', '.avi', '.mov', '.ogv', '.gif', '.png', '.jpg', '.jpeg', '.webp', '.mp3', '.wav', '.ogg', '.aac', '.m4a', '.flac'].includes(ext)) {
+          openMediaSource(`/api/fs/stream?file=${encodeURIComponent(item.path)}`, item.name, ext);
         } else {
           openFileInEditor(item.path);
         }
@@ -2235,6 +2250,424 @@ document.addEventListener('DOMContentLoaded', () => {
       document.querySelectorAll('.wallpaper-opt').forEach(o => o.classList.replace('border-sky-500', 'border-transparent'));
       opt.classList.replace('border-transparent', 'border-sky-500');
     });
+  });
+
+  // ==========================================
+  // 11. VIDEO, GIF & MEDYA OYNATICI (MEDIA PLAYER ENGINE)
+  // ==========================================
+  const mediaVideoEl = document.getElementById('media-video-element');
+  const mediaGifEl = document.getElementById('media-gif-element');
+  const mediaVisualizerEl = document.getElementById('media-audio-visualizer');
+  const mediaAudioTitleEl = document.getElementById('media-audio-title');
+  const mediaEmptyEl = document.getElementById('media-empty-state');
+  const mediaBigPlayBtn = document.getElementById('media-big-play-btn');
+  const mediaPlayBtn = document.getElementById('media-btn-play');
+  const mediaLoopBtn = document.getElementById('media-btn-loop');
+  const mediaTimeline = document.getElementById('media-timeline-slider');
+  const mediaCurrentTimeEl = document.getElementById('media-time-current');
+  const mediaDurationEl = document.getElementById('media-time-duration');
+  const mediaVolumeSlider = document.getElementById('media-volume-slider');
+  const mediaMuteBtn = document.getElementById('media-btn-mute');
+  const mediaVolumeIcon = document.getElementById('media-volume-icon');
+  const mediaSpeedSelect = document.getElementById('media-speed-select');
+  const mediaPipBtn = document.getElementById('media-btn-pip');
+  const mediaFullscreenBtn = document.getElementById('media-btn-fullscreen');
+  const mediaTypeBadge = document.getElementById('media-type-badge');
+  const mediaFilenameEl = document.getElementById('media-filename');
+  const mediaSampleSelect = document.getElementById('media-sample-selector');
+  const mediaFileInput = document.getElementById('media-file-input');
+  const mediaBtnOpenFile = document.getElementById('media-btn-open-file');
+  const mediaBtnUrlStream = document.getElementById('media-btn-url-stream');
+  const mediaDisplayContainer = document.getElementById('media-display-container');
+
+  let isMediaLooping = true;
+  let currentMediaType = 'none'; // 'video', 'gif', 'audio', 'image'
+  let previousMediaVolume = 1.0;
+
+  function formatMediaTime(sec) {
+    if (!sec || isNaN(sec) || !isFinite(sec)) return '00:00';
+    const s = Math.floor(sec);
+    const m = Math.floor(s / 60);
+    const h = Math.floor(m / 60);
+    const remM = m % 60;
+    const remS = s % 60;
+    if (h > 0) {
+      return `${h.toString().padStart(2, '0')}:${remM.toString().padStart(2, '0')}:${remS.toString().padStart(2, '0')}`;
+    }
+    return `${remM.toString().padStart(2, '0')}:${remS.toString().padStart(2, '0')}`;
+  }
+
+  function openMediaSource(sourceUrl, displayName = 'Medya Dosyası', fileExtension = '') {
+    if (!sourceUrl) return;
+
+    openApp('media');
+
+    const ext = (fileExtension || sourceUrl.split('?')[0].split('.').pop() || '').toLowerCase().replace('.', '');
+    const isGif = ext === 'gif' || sourceUrl.includes('.gif') || sourceUrl.includes('giphy');
+    const isAudio = ['mp3', 'wav', 'ogg', 'aac', 'flac', 'm4a'].includes(ext);
+    const isImage = ['png', 'jpg', 'jpeg', 'webp', 'svg', 'bmp'].includes(ext);
+
+    if (mediaFilenameEl) {
+      mediaFilenameEl.textContent = displayName || 'Medya Oynatılıyor';
+    }
+
+    if (isGif || isImage) {
+      currentMediaType = isGif ? 'gif' : 'image';
+      if (mediaVideoEl) {
+        mediaVideoEl.pause();
+        mediaVideoEl.classList.add('hidden');
+      }
+      if (mediaVisualizerEl) mediaVisualizerEl.classList.add('hidden');
+      if (mediaEmptyEl) mediaEmptyEl.classList.add('hidden');
+      if (mediaBigPlayBtn) mediaBigPlayBtn.classList.add('hidden');
+
+      if (mediaGifEl) {
+        mediaGifEl.src = sourceUrl;
+        mediaGifEl.classList.remove('hidden');
+      }
+
+      if (mediaTypeBadge) {
+        mediaTypeBadge.textContent = isGif ? 'GIF ANİMASYON' : 'RESİM';
+        mediaTypeBadge.className = 'text-[10px] font-mono uppercase bg-pink-950/80 text-pink-300 border border-pink-800/60 px-2 py-0.5 rounded-full';
+      }
+
+      if (mediaPlayBtn) {
+        mediaPlayBtn.innerHTML = '<i class="fa-solid fa-play"></i> <span>Görsel</span>';
+        mediaPlayBtn.disabled = true;
+      }
+      if (mediaTimeline) {
+        mediaTimeline.value = 100;
+        mediaTimeline.disabled = true;
+      }
+      if (mediaCurrentTimeEl) mediaCurrentTimeEl.textContent = isGif ? 'Döngüde' : 'Statik';
+      if (mediaDurationEl) mediaDurationEl.textContent = isGif ? 'GIF' : 'IMG';
+
+    } else if (isAudio) {
+      currentMediaType = 'audio';
+      if (mediaGifEl) mediaGifEl.classList.add('hidden');
+      if (mediaEmptyEl) mediaEmptyEl.classList.add('hidden');
+      if (mediaBigPlayBtn) mediaBigPlayBtn.classList.add('hidden');
+
+      if (mediaVisualizerEl) {
+        mediaVisualizerEl.classList.remove('hidden');
+        if (mediaAudioTitleEl) mediaAudioTitleEl.textContent = displayName;
+      }
+
+      if (mediaVideoEl) {
+        mediaVideoEl.classList.add('hidden');
+        mediaVideoEl.src = sourceUrl;
+        mediaVideoEl.loop = isMediaLooping;
+        mediaVideoEl.play().catch(e => console.log('Audio autoplay:', e));
+      }
+
+      if (mediaTypeBadge) {
+        mediaTypeBadge.textContent = `SES / ${ext.toUpperCase() || 'AUDIO'}`;
+        mediaTypeBadge.className = 'text-[10px] font-mono uppercase bg-amber-950/80 text-amber-300 border border-amber-800/60 px-2 py-0.5 rounded-full';
+      }
+
+      if (mediaPlayBtn) {
+        mediaPlayBtn.disabled = false;
+        mediaPlayBtn.innerHTML = '<i class="fa-solid fa-pause"></i> <span>Duraklat</span>';
+      }
+      if (mediaTimeline) mediaTimeline.disabled = false;
+
+    } else {
+      // Default: Video Player (MP4, WebM, MKV, etc.)
+      currentMediaType = 'video';
+      if (mediaGifEl) mediaGifEl.classList.add('hidden');
+      if (mediaVisualizerEl) mediaVisualizerEl.classList.add('hidden');
+      if (mediaEmptyEl) mediaEmptyEl.classList.add('hidden');
+
+      if (mediaVideoEl) {
+        mediaVideoEl.classList.remove('hidden');
+        mediaVideoEl.src = sourceUrl;
+        mediaVideoEl.loop = isMediaLooping;
+        mediaVideoEl.play().catch(e => {
+          console.log('Video autoplay deferred:', e);
+          if (mediaBigPlayBtn) mediaBigPlayBtn.classList.remove('hidden');
+        });
+      }
+
+      if (mediaTypeBadge) {
+        mediaTypeBadge.textContent = `VİDEO / ${ext.toUpperCase() || 'MP4'}`;
+        mediaTypeBadge.className = 'text-[10px] font-mono uppercase bg-rose-950/80 text-rose-300 border border-rose-800/60 px-2 py-0.5 rounded-full';
+      }
+
+      if (mediaPlayBtn) {
+        mediaPlayBtn.disabled = false;
+        mediaPlayBtn.innerHTML = '<i class="fa-solid fa-pause"></i> <span>Duraklat</span>';
+      }
+      if (mediaTimeline) mediaTimeline.disabled = false;
+    }
+  }
+
+  // Video Element Playback Listeners
+  if (mediaVideoEl) {
+    mediaVideoEl.addEventListener('play', () => {
+      if (mediaPlayBtn) {
+        mediaPlayBtn.innerHTML = '<i class="fa-solid fa-pause"></i> <span>Duraklat</span>';
+      }
+      if (mediaBigPlayBtn) mediaBigPlayBtn.classList.add('hidden');
+    });
+
+    mediaVideoEl.addEventListener('pause', () => {
+      if (mediaPlayBtn) {
+        mediaPlayBtn.innerHTML = '<i class="fa-solid fa-play"></i> <span>Oynat</span>';
+      }
+      if (currentMediaType === 'video' && mediaBigPlayBtn) {
+        mediaBigPlayBtn.classList.remove('hidden');
+      }
+    });
+
+    mediaVideoEl.addEventListener('timeupdate', () => {
+      if (!mediaVideoEl.duration) return;
+      const progress = (mediaVideoEl.currentTime / mediaVideoEl.duration) * 100;
+      if (mediaTimeline && !mediaTimeline.matches(':active')) {
+        mediaTimeline.value = isNaN(progress) ? 0 : progress;
+      }
+      if (mediaCurrentTimeEl) {
+        mediaCurrentTimeEl.textContent = formatMediaTime(mediaVideoEl.currentTime);
+      }
+    });
+
+    mediaVideoEl.addEventListener('loadedmetadata', () => {
+      if (mediaDurationEl && mediaVideoEl.duration) {
+        mediaDurationEl.textContent = formatMediaTime(mediaVideoEl.duration);
+      }
+      if (mediaCurrentTimeEl) {
+        mediaCurrentTimeEl.textContent = formatMediaTime(mediaVideoEl.currentTime || 0);
+      }
+    });
+
+    mediaVideoEl.addEventListener('ended', () => {
+      if (!isMediaLooping) {
+        if (mediaPlayBtn) mediaPlayBtn.innerHTML = '<i class="fa-solid fa-rotate-left"></i> <span>Yeniden</span>';
+        if (mediaBigPlayBtn && currentMediaType === 'video') mediaBigPlayBtn.classList.remove('hidden');
+      }
+    });
+
+    mediaVideoEl.addEventListener('error', (e) => {
+      console.error('Media playback error:', e);
+      if (mediaTypeBadge) {
+        mediaTypeBadge.textContent = 'OYNATMA HATASI';
+        mediaTypeBadge.className = 'text-[10px] font-mono uppercase bg-red-950/80 text-red-300 border border-red-800/60 px-2 py-0.5 rounded-full';
+      }
+    });
+  }
+
+  // Play / Pause Toggle
+  function toggleMediaPlay() {
+    if (!mediaVideoEl || currentMediaType === 'gif' || currentMediaType === 'image') return;
+    if (mediaVideoEl.paused || mediaVideoEl.ended) {
+      mediaVideoEl.play().catch(e => console.log(e));
+    } else {
+      mediaVideoEl.pause();
+    }
+  }
+
+  mediaPlayBtn?.addEventListener('click', toggleMediaPlay);
+  mediaBigPlayBtn?.addEventListener('click', toggleMediaPlay);
+  mediaVideoEl?.addEventListener('click', toggleMediaPlay);
+
+  // Seek Slider
+  mediaTimeline?.addEventListener('input', (e) => {
+    if (mediaVideoEl && mediaVideoEl.duration) {
+      const val = parseFloat(e.target.value);
+      mediaVideoEl.currentTime = (val / 100) * mediaVideoEl.duration;
+      if (mediaCurrentTimeEl) mediaCurrentTimeEl.textContent = formatMediaTime(mediaVideoEl.currentTime);
+    }
+  });
+
+  // Rewind & Fast Forward (5 seconds)
+  document.getElementById('media-btn-rewind')?.addEventListener('click', () => {
+    if (mediaVideoEl) mediaVideoEl.currentTime = Math.max(0, mediaVideoEl.currentTime - 5);
+  });
+
+  document.getElementById('media-btn-forward')?.addEventListener('click', () => {
+    if (mediaVideoEl && mediaVideoEl.duration) {
+      mediaVideoEl.currentTime = Math.min(mediaVideoEl.duration, mediaVideoEl.currentTime + 5);
+    }
+  });
+
+  // Loop Toggle
+  mediaLoopBtn?.addEventListener('click', () => {
+    isMediaLooping = !isMediaLooping;
+    if (mediaVideoEl) mediaVideoEl.loop = isMediaLooping;
+    if (isMediaLooping) {
+      mediaLoopBtn.classList.replace('text-slate-400', 'text-sky-400');
+      mediaLoopBtn.classList.replace('hover:text-white', 'text-sky-400');
+      mediaLoopBtn.title = 'Döngü (Loop): Açık';
+      mediaLoopBtn.innerHTML = '<i class="fa-solid fa-repeat text-sky-400"></i>';
+    } else {
+      mediaLoopBtn.classList.replace('text-sky-400', 'text-slate-400');
+      mediaLoopBtn.title = 'Döngü (Loop): Kapalı';
+      mediaLoopBtn.innerHTML = '<i class="fa-solid fa-repeat text-slate-400"></i>';
+    }
+  });
+
+  // Playback Speed Selector
+  mediaSpeedSelect?.addEventListener('change', (e) => {
+    if (mediaVideoEl) {
+      mediaVideoEl.playbackRate = parseFloat(e.target.value);
+    }
+  });
+
+  // Volume & Mute Controls
+  function updateVolumeIcon(vol, isMuted) {
+    if (!mediaVolumeIcon) return;
+    if (isMuted || vol === 0) {
+      mediaVolumeIcon.className = 'fa-solid fa-volume-xmark text-rose-400 text-xs';
+    } else if (vol < 0.5) {
+      mediaVolumeIcon.className = 'fa-solid fa-volume-low text-slate-300 text-xs';
+    } else {
+      mediaVolumeIcon.className = 'fa-solid fa-volume-high text-slate-300 text-xs';
+    }
+  }
+
+  mediaVolumeSlider?.addEventListener('input', (e) => {
+    const vol = parseFloat(e.target.value);
+    if (mediaVideoEl) {
+      mediaVideoEl.volume = vol;
+      mediaVideoEl.muted = vol === 0;
+    }
+    updateVolumeIcon(vol, vol === 0);
+  });
+
+  mediaMuteBtn?.addEventListener('click', () => {
+    if (!mediaVideoEl) return;
+    if (mediaVideoEl.muted) {
+      mediaVideoEl.muted = false;
+      mediaVideoEl.volume = previousMediaVolume || 0.8;
+      if (mediaVolumeSlider) mediaVolumeSlider.value = mediaVideoEl.volume;
+      updateVolumeIcon(mediaVideoEl.volume, false);
+    } else {
+      previousMediaVolume = mediaVideoEl.volume || 0.8;
+      mediaVideoEl.muted = true;
+      if (mediaVolumeSlider) mediaVolumeSlider.value = 0;
+      updateVolumeIcon(0, true);
+    }
+  });
+
+  // Picture-in-Picture (PiP)
+  mediaPipBtn?.addEventListener('click', async () => {
+    if (!mediaVideoEl || currentMediaType !== 'video') return;
+    try {
+      if (document.pictureInPictureElement) {
+        await document.exitPictureInPicture();
+      } else if (document.pictureInPictureEnabled) {
+        await mediaVideoEl.requestPictureInPicture();
+      }
+    } catch (e) {
+      console.warn('PiP not available:', e);
+    }
+  });
+
+  // Fullscreen toggle
+  mediaFullscreenBtn?.addEventListener('click', () => {
+    const target = mediaDisplayContainer || APPS.media.el;
+    if (!document.fullscreenElement) {
+      target?.requestFullscreen?.().catch(e => console.warn(e));
+    } else {
+      document.exitFullscreen?.().catch(e => console.warn(e));
+    }
+  });
+
+  // Local File Upload / Pick
+  mediaBtnOpenFile?.addEventListener('click', () => mediaFileInput?.click());
+  mediaFileInput?.addEventListener('change', (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const url = URL.createObjectURL(file);
+      const ext = '.' + file.name.split('.').pop();
+      openMediaSource(url, file.name, ext);
+      e.target.value = '';
+    }
+  });
+
+  // Direct URL Streaming
+  mediaBtnUrlStream?.addEventListener('click', () => {
+    const url = prompt('Oynatmak istediğiniz Video veya GIF doğrudan URL adresini girin (MP4, WebM, GIF, MP3 vb.):');
+    if (url && url.trim()) {
+      const cleanUrl = url.trim();
+      const name = cleanUrl.split('/').pop().split('?')[0] || 'Canlı Medya Akışı';
+      openMediaSource(cleanUrl, name);
+    }
+  });
+
+  // Preset Sample Media Selector
+  mediaSampleSelect?.addEventListener('change', (e) => {
+    const val = e.target.value;
+    if (!val) return;
+    const opt = e.target.selectedOptions?.[0];
+    const name = opt?.textContent || 'Örnek Medya';
+    openMediaSource(val, name);
+  });
+
+  // Drag and Drop files directly onto Media Player Window
+  const mediaWinEl = document.getElementById('win-media');
+  if (mediaWinEl) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+      mediaWinEl.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        mediaWinEl.classList.add('ring-2', 'ring-rose-500/80');
+      });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+      mediaWinEl.addEventListener(eventName, (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        mediaWinEl.classList.remove('ring-2', 'ring-rose-500/80');
+      });
+    });
+
+    mediaWinEl.addEventListener('drop', (e) => {
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        const url = URL.createObjectURL(file);
+        const ext = '.' + file.name.split('.').pop();
+        openMediaSource(url, file.name, ext);
+      }
+    });
+  }
+
+  // Global Media Keyboard Shortcuts when Media Player is focused
+  document.addEventListener('keydown', (e) => {
+    if (activeAppId === 'media' && !APPS.media.el.classList.contains('hidden')) {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+
+      if (e.code === 'Space') {
+        e.preventDefault();
+        toggleMediaPlay();
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault();
+        if (mediaVideoEl) mediaVideoEl.currentTime = Math.max(0, mediaVideoEl.currentTime - 5);
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault();
+        if (mediaVideoEl && mediaVideoEl.duration) mediaVideoEl.currentTime = Math.min(mediaVideoEl.duration, mediaVideoEl.currentTime + 5);
+      } else if (e.code === 'ArrowUp') {
+        e.preventDefault();
+        if (mediaVideoEl) {
+          mediaVideoEl.volume = Math.min(1, mediaVideoEl.volume + 0.1);
+          if (mediaVolumeSlider) mediaVolumeSlider.value = mediaVideoEl.volume;
+          updateVolumeIcon(mediaVideoEl.volume, false);
+        }
+      } else if (e.code === 'ArrowDown') {
+        e.preventDefault();
+        if (mediaVideoEl) {
+          mediaVideoEl.volume = Math.max(0, mediaVideoEl.volume - 0.1);
+          if (mediaVolumeSlider) mediaVolumeSlider.value = mediaVideoEl.volume;
+          updateVolumeIcon(mediaVideoEl.volume, mediaVideoEl.volume === 0);
+        }
+      } else if (e.key === 'm' || e.key === 'M') {
+        mediaMuteBtn?.click();
+      } else if (e.key === 'f' || e.key === 'F') {
+        mediaFullscreenBtn?.click();
+      } else if (e.key === 'l' || e.key === 'L') {
+        mediaLoopBtn?.click();
+      }
+    }
   });
 
   // Helpers
