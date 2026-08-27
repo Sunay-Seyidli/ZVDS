@@ -4,7 +4,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Global System State
   let zIndexCount = 100;
   let activeAppId = null;
-  let socket = window.io(); // Global socket instance for WebOS
+  let socket = window.io({ transports: ['websocket', 'polling'], upgrade: true }); // Global low-latency socket
   let term = null;
   let fitAddon = null;
   let currentFsDir = '';
@@ -673,8 +673,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==========================================
   function initTerminal() {
     if (term) {
-      if (fitAddon) fitAddon.fit();
-      setTimeout(() => term.focus(), 50);
+      if (fitAddon) {
+        try { fitAddon.fit(); } catch (e) {}
+      }
+      setTimeout(() => term.focus(), 30);
       return;
     }
 
@@ -684,8 +686,12 @@ document.addEventListener('DOMContentLoaded', () => {
     term = new window.Terminal({
       cursorBlink: true,
       cursorStyle: 'block',
-      fontFamily: 'Courier New, Courier, monospace',
+      fontFamily: 'Menlo, Monaco, "Courier New", Courier, monospace',
       fontSize: 14,
+      lineHeight: 1.2,
+      scrollback: 2000,
+      fastScrollModifier: 'alt',
+      allowProposedApi: true,
       theme: {
         background: '#000000',
         foreground: '#f8fafc',
@@ -697,9 +703,9 @@ document.addEventListener('DOMContentLoaded', () => {
     fitAddon = new window.FitAddon.FitAddon();
     term.loadAddon(fitAddon);
     term.open(container);
-    fitAddon.fit();
+    try { fitAddon.fit(); } catch (e) {}
 
-    if (!socket) socket = window.io();
+    if (!socket) socket = window.io({ transports: ['websocket', 'polling'], upgrade: true });
 
     const startSession = () => {
       term.writeln('\r\n\x1b[32m✔ WebOS Cloud Terminal Oturumu Başlatıldı (Root Privileged).\x1b[0m\r\n');
@@ -744,10 +750,14 @@ document.addEventListener('DOMContentLoaded', () => {
       if (term) term.focus();
     });
 
+    let resizeDebounce = null;
     window.addEventListener('resize', () => {
-      if (fitAddon && !APPS.terminal.el.classList.contains('hidden')) {
-        fitAddon.fit();
-      }
+      if (resizeDebounce) clearTimeout(resizeDebounce);
+      resizeDebounce = setTimeout(() => {
+        if (fitAddon && !APPS.terminal.el.classList.contains('hidden')) {
+          try { fitAddon.fit(); } catch (e) {}
+        }
+      }, 60);
     });
 
     document.getElementById('term-clear-btn')?.addEventListener('click', () => {
@@ -755,7 +765,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (term) term.focus();
     });
 
-    setTimeout(() => term.focus(), 150);
+    setTimeout(() => term.focus(), 80);
   }
 
   // ==========================================
@@ -1361,6 +1371,18 @@ document.addEventListener('DOMContentLoaded', () => {
     socket.on('system-metrics', (data) => {
       if (!data) return;
 
+      const ramVal = Number(data.memory.usagePercent) || 0;
+      // Top bar memory icon tooltip
+      const topMemIcon = document.getElementById('top-mem-icon');
+      if (topMemIcon) topMemIcon.title = `Sistem Belleği: %${ramVal.toFixed(1)}`;
+
+      // Only perform heavy Chart.js rendering & Process table DOM rebuilding if Task Manager is open
+      const isMonitorVisible = APPS.monitor?.el && !APPS.monitor.el.classList.contains('hidden') && !APPS.monitor.el.classList.contains('minimized');
+      if (!isMonitorVisible) {
+        latestProcesses = data.processes || [];
+        return;
+      }
+
       initTaskCharts();
 
       // 1. Hardware Specs Footers & Sidebar
@@ -1403,7 +1425,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       // 3. RAM Gauge & Chart
-      const ramVal = Number(data.memory.usagePercent) || 0;
       const memPercentEl = document.getElementById('sys-mem-percent');
       const memBarEl = document.getElementById('sys-mem-bar');
       const memTextEl = document.getElementById('sys-mem-text');
@@ -1421,10 +1442,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ramChart.data.datasets[0].data.shift();
         ramChart.update('none');
       }
-
-      // Top bar memory icon tooltip
-      const topMemIcon = document.getElementById('top-mem-icon');
-      if (topMemIcon) topMemIcon.title = `Sistem Belleği: %${ramVal.toFixed(1)}`;
 
       // 4. Disk Gauge & Chart
       const diskVal = Number(data.disk.usagePercent) || 0;
@@ -1499,9 +1516,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function resolveTargetUrl(rawUrl) {
     let url = (rawUrl || '').trim();
-    if (!url) return 'https://www.google.com';
+    if (!url || url.includes('browser-start.html')) return '/browser-start.html';
 
-    if (url.startsWith('http://') || url.startsWith('https://')) {
+    if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/')) {
       return url;
     }
 
@@ -1523,71 +1540,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const modeTextEl = document.getElementById('chrome-mode-text');
     if (!container) return;
 
-    const targetUrl = resolveTargetUrl(initialUrl || chromeUrlInput?.value || 'https://www.google.com');
+    const targetUrl = resolveTargetUrl(initialUrl || chromeUrlInput?.value || '/browser-start.html');
 
     if (chromeUrlInput) {
-      chromeUrlInput.value = targetUrl;
+      chromeUrlInput.value = targetUrl === '/browser-start.html' ? '' : targetUrl;
     }
 
-    // Function to activate Web Browser Proxy Iframe mode
-    const loadWebIframeMode = () => {
-      if (canvasEl) canvasEl.classList.add('hidden');
-      if (iframeEl) {
-        iframeEl.classList.remove('hidden');
-        iframeEl.src = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
-      }
-      if (statusEl) statusEl.classList.add('hidden');
-      if (modeTextEl) modeTextEl.textContent = 'Web Proxy Modu';
-    };
+    if (canvasEl) canvasEl.classList.add('hidden');
+    if (statusEl) statusEl.classList.add('hidden');
 
-    if (statusEl) {
-      statusEl.classList.remove('hidden');
-      statusEl.innerHTML = `
-        <div class="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-3"></div>
-        <p class="text-xs font-medium text-slate-300">VDS Masaüstü ve Chrome Açılıyor...</p>
-      `;
-    }
-
-    // Inform backend to start Chrome on Display :99
-    try {
-      fetch('/api/start-chrome', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl })
-      }).catch(() => {});
-    } catch (err) {}
-
-    // Check VNC server status
-    let isVncServerActive = false;
-    try {
-      const vncRes = await fetch('/api/vnc-status');
-      const vncData = await vncRes.json();
-      isVncServerActive = !!vncData.active;
-    } catch (e) {
-      isVncServerActive = false;
-    }
-
-    if (!isVncServerActive) {
-      loadWebIframeMode();
-      return;
-    }
-
-    // In Docker VDS with noVNC: use direct noVNC web client via iframe or RFB canvas
-    if (modeTextEl) modeTextEl.textContent = 'VDS Canlı Ekran';
-    
-    // Direct noVNC embedded player is the most reliable across all browsers
     if (iframeEl) {
       iframeEl.classList.remove('hidden');
-      if (canvasEl) canvasEl.classList.add('hidden');
-      const novncUrl = `/novnc/vnc.html?autoconnect=true&resize=scale&quality=8&compression=2`;
-      if (iframeEl.src.indexOf('/novnc/vnc.html') === -1) {
-        iframeEl.src = novncUrl;
+      if (modeTextEl) modeTextEl.textContent = 'Web Modu';
+      if (targetUrl === '/browser-start.html') {
+        iframeEl.src = '/browser-start.html';
+      } else {
+        iframeEl.src = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
       }
-      if (statusEl) statusEl.classList.add('hidden');
-      return;
     }
 
-    loadWebIframeMode();
+    // Attempt starting background Chrome silently if in Docker environment
+    fetch('/api/start-chrome', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: targetUrl === '/browser-start.html' ? 'https://www.google.com' : targetUrl })
+    }).catch(() => {});
   }
 
   function navigateChrome(explicitUrl) {
@@ -1597,18 +1574,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const targetUrl = resolveTargetUrl(rawQuery);
 
     if (chromeUrlInput) {
-      chromeUrlInput.value = targetUrl;
+      chromeUrlInput.value = targetUrl === '/browser-start.html' ? '' : targetUrl;
     }
 
     // Launch URL on container Chrome
     fetch('/api/start-chrome', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: targetUrl })
+      body: JSON.stringify({ url: targetUrl === '/browser-start.html' ? 'https://www.google.com' : targetUrl })
     }).catch(() => {});
 
     if (iframeEl && !iframeEl.classList.contains('hidden') && iframeEl.src.indexOf('/novnc/') === -1) {
-      iframeEl.src = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+      if (targetUrl === '/browser-start.html') {
+        iframeEl.src = '/browser-start.html';
+      } else {
+        iframeEl.src = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+      }
     } else {
       initChromeVNC(targetUrl);
     }
@@ -1619,14 +1600,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const iframeEl = document.getElementById('chrome-iframe');
     const chromeUrlInput = document.getElementById('chrome-url-input');
     const modeTextEl = document.getElementById('chrome-mode-text');
-    const targetUrl = resolveTargetUrl(chromeUrlInput?.value || 'https://www.google.com');
+    const targetUrl = resolveTargetUrl(chromeUrlInput?.value || '/browser-start.html');
 
     if (!iframeEl) return;
 
     if (iframeEl.src.indexOf('/novnc/') !== -1) {
       // Switch to Web Proxy Mode
-      iframeEl.src = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
-      if (modeTextEl) modeTextEl.textContent = 'Web Proxy';
+      iframeEl.src = targetUrl === '/browser-start.html' ? '/browser-start.html' : `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+      if (modeTextEl) modeTextEl.textContent = 'Web Modu';
     } else {
       // Switch to VDS noVNC Live Desktop Mode
       iframeEl.src = `/novnc/vnc.html?autoconnect=true&resize=scale&quality=8&compression=2`;
@@ -1634,7 +1615,7 @@ document.addEventListener('DOMContentLoaded', () => {
       fetch('/api/start-chrome', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: targetUrl })
+        body: JSON.stringify({ url: targetUrl === '/browser-start.html' ? 'https://www.google.com' : targetUrl })
       }).catch(() => {});
     }
   });
@@ -1643,7 +1624,8 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('chrome-btn-external')?.addEventListener('click', () => {
     const chromeUrlInput = document.getElementById('chrome-url-input');
     const targetUrl = resolveTargetUrl(chromeUrlInput?.value || 'https://www.google.com');
-    window.open(targetUrl, '_blank', 'noopener,noreferrer');
+    const outUrl = targetUrl === '/browser-start.html' ? 'https://www.google.com' : targetUrl;
+    window.open(outUrl, '_blank', 'noopener,noreferrer');
   });
 
   document.getElementById('chrome-btn-go')?.addEventListener('click', () => navigateChrome());
@@ -1652,7 +1634,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.getElementById('chrome-btn-home')?.addEventListener('click', () => {
-    navigateChrome('https://www.google.com');
+    navigateChrome('/browser-start.html');
   });
 
   document.getElementById('chrome-btn-back')?.addEventListener('click', () => {

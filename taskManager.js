@@ -13,15 +13,15 @@ let hardwareInfo = {
 async function initHardwareInfo() {
   try {
     const [cpu, mem, fsSize] = await Promise.all([
-      si.cpu(),
-      si.mem(),
-      si.fsSize()
+      si.cpu().catch(() => ({ manufacturer: '', brand: '', cores: os.cpus().length })),
+      si.mem().catch(() => ({ total: os.totalmem() })),
+      si.fsSize().catch(() => [])
     ]);
 
-    const totalDiskBytes = fsSize.reduce((acc, drive) => acc + (drive.size || 0), 0);
+    const totalDiskBytes = Array.isArray(fsSize) ? fsSize.reduce((acc, drive) => acc + (drive.size || 0), 0) : 0;
 
     hardwareInfo = {
-      cpuModel: `${cpu.manufacturer} ${cpu.brand}`.trim() || os.cpus()[0]?.model || 'Generic CPU',
+      cpuModel: `${cpu.manufacturer || ''} ${cpu.brand || ''}`.trim() || os.cpus()[0]?.model || 'Cloud vCPU',
       cores: cpu.cores || os.cpus().length,
       totalRamGB: (mem.total / (1024 * 1024 * 1024)).toFixed(2),
       totalDiskGB: (totalDiskBytes / (1024 * 1024 * 1024)).toFixed(2)
@@ -35,16 +35,49 @@ export function setupTaskManager(io) {
   // Read hardware info on startup
   initHardwareInfo();
 
-  // Metrics collection ticker (every 1 second)
+  let tickCount = 0;
+  let cachedProcesses = [];
+  let cachedDisk = { size: 0, used: 0, use: 0, mount: '/' };
+
+  // Optimized metrics collection (Runs every 3 seconds to keep Event Loop and Terminal ultra-responsive)
   setInterval(async () => {
     try {
-      // Gather system metrics in parallel
-      const [currentLoad, mem, fsSize, processes] = await Promise.all([
-        si.currentLoad(),
-        si.mem(),
-        si.fsSize(),
-        si.processes()
-      ]);
+      tickCount++;
+      const promises = [
+        si.currentLoad().catch(() => ({ currentLoad: 5 })),
+        si.mem().catch(() => ({ total: os.totalmem(), used: os.totalmem() - os.freemem(), free: os.freemem() }))
+      ];
+
+      // Only fetch heavy processes and disk every 2nd cycle (every 6 seconds) to prevent CPU hogging
+      if (tickCount % 2 === 1 || cachedProcesses.length === 0) {
+        promises.push(si.processes().catch(() => ({ list: [] })));
+        promises.push(si.fsSize().catch(() => []));
+      }
+
+      const results = await Promise.all(promises);
+      const currentLoad = results[0];
+      const mem = results[1];
+
+      if (results[2]) {
+        const procResult = results[2];
+        cachedProcesses = (procResult.list || [])
+          .sort((a, b) => (b.cpu || 0) - (a.cpu || 0))
+          .slice(0, 20)
+          .map((proc) => ({
+            pid: proc.pid,
+            name: proc.name,
+            cpu: proc.cpu ? Number(proc.cpu).toFixed(1) : '0.0',
+            memory: proc.mem ? Number(proc.mem).toFixed(1) : '0.0',
+            memRssMB: (proc.memRss ? proc.memRss / 1024 : 0).toFixed(1),
+            user: proc.user || 'system',
+            state: proc.state || 'running'
+          }));
+      }
+
+      if (results[3]) {
+        const fsResult = results[3];
+        cachedDisk = (Array.isArray(fsResult) && fsResult[0]) ? fsResult[0] : { size: 0, used: 0, use: 0, mount: '/' };
+      }
 
       // Calculate RAM values
       const ramTotalMB = (mem.total / (1024 * 1024)).toFixed(0);
@@ -53,30 +86,15 @@ export function setupTaskManager(io) {
       const ramPercent = ((mem.used / mem.total) * 100).toFixed(1);
 
       // Main disk calculation
-      const primaryDisk = fsSize[0] || { size: 0, used: 0, use: 0, mount: '/' };
-      const diskTotalGB = (primaryDisk.size / (1024 * 1024 * 1024)).toFixed(1);
-      const diskUsedGB = (primaryDisk.used / (1024 * 1024 * 1024)).toFixed(1);
-      const diskPercent = primaryDisk.use ? primaryDisk.use.toFixed(1) : 0;
-
-      // Filter and format top 30 processes sorted by CPU usage
-      const processList = (processes.list || [])
-        .sort((a, b) => b.cpu - a.cpu)
-        .slice(0, 35)
-        .map((proc) => ({
-          pid: proc.pid,
-          name: proc.name,
-          cpu: proc.cpu ? proc.cpu.toFixed(1) : '0.0',
-          memory: proc.mem ? proc.mem.toFixed(1) : '0.0',
-          memRssMB: (proc.memRss / 1024).toFixed(1),
-          user: proc.user || 'system',
-          state: proc.state || 'running'
-        }));
+      const diskTotalGB = (cachedDisk.size / (1024 * 1024 * 1024)).toFixed(1);
+      const diskUsedGB = (cachedDisk.used / (1024 * 1024 * 1024)).toFixed(1);
+      const diskPercent = cachedDisk.use ? Number(cachedDisk.use).toFixed(1) : 0;
 
       const metricsData = {
         timestamp: Date.now(),
         hardware: hardwareInfo,
         cpu: {
-          usagePercent: currentLoad.currentLoad.toFixed(1),
+          usagePercent: (currentLoad.currentLoad || 0).toFixed(1),
           cores: hardwareInfo.cores,
           model: hardwareInfo.cpuModel
         },
@@ -87,21 +105,21 @@ export function setupTaskManager(io) {
           usagePercent: Number(ramPercent)
         },
         disk: {
-          mount: primaryDisk.mount || '/',
+          mount: cachedDisk.mount || '/',
           totalGB: Number(diskTotalGB),
           usedGB: Number(diskUsedGB),
           usagePercent: Number(diskPercent)
         },
-        processes: processList
+        processes: cachedProcesses
       };
 
-      // Broadcast real-time hardware metrics to all connected clients
+      // Broadcast to clients
       io.emit('system-metrics', metricsData);
 
     } catch (err) {
-      console.error('⚠️ Sistem metrikleri toplama hatası:', err.message);
+      // Quiet fail to avoid polluting terminal logs
     }
-  }, 1000);
+  }, 3000);
 
   // Setup Socket.io event handlers for process management
   io.on('connection', (socket) => {
@@ -121,14 +139,12 @@ export function setupTaskManager(io) {
 
       try {
         process.kill(pid, 'SIGKILL');
-        console.log(`💀 Process terminated via Task Manager: PID ${pid}`);
         socket.emit('kill-process-response', {
           success: true,
           pid,
           message: `PID ${pid} işlemi başarıyla sonlandırıldı.`
         });
       } catch (err) {
-        console.error(`Failed to kill process PID ${pid}:`, err.message);
         socket.emit('kill-process-response', {
           success: false,
           pid,
