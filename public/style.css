@@ -1,0 +1,234 @@
+/* WebOS Operating System Stylesheet - Ultra High Performance 60 FPS */
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.6);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(51, 65, 85, 0.8);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 1);
+}
+
+/* Wallpapers */
+.wallpaper-nebula {
+  background: radial-gradient(circle at 20% 20%, #1e1b4b 0%, #0f172a 50%, #020617 100%);
+}
+
+.wallpaper-cyberpunk {
+  background: radial-gradient(circle at 80% 20%, #311042 0%, #0f172a 60%, #020617 100%);
+}
+
+.wallpaper-sunset {
+  background: linear-gradient(135deg, #1e1b4b 0%, #312e81 30%, #0f172a 70%, #020617 100%);
+}
+
+.wallpaper-minimal {
+  background: #020617;
+}
+
+/* App Window Base Styling & GPU acceleration */
+.app-window {
+  will-change: transform, width, height, opacity;
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease, width 0.1s ease-out, height 0.1s ease-out;
+}
+
+.app-window.is-dragging, .app-window.is-resizing {
+  transition: none !important; /* Instant response during drag/resize for 60fps */
+  user-select: none;
+}
+
+.app-window.maximized {
+  top: 32px !important;
+  left: 0 !important;
+  width: 100vw !important;
+  height: calc(100vh - 80px) !important;
+  border-radius: 0 !important;
+  transform: none !important;
+}
+
+.app-window.minimized {
+  opacity: 0;
+  transform: scale(0.85) translateY(120px) !important;
+  pointer-events: none !important;
+}
+
+.app-window.active {
+  box-shadow: 0 25px 50px -12px rgba(14, 165, 233, 0.25), 0 0 0 1px rgba(56, 189, 248, 0.4);
+}
+
+/* Resize Handles (8-Directions & Touch Shielding) */
+.resize-handle {
+  position: absolute;
+  z-index: 30;
+  touch-action: none;
+}
+
+.resize-handle.handle-r {
+  top: 0;
+  right: -3px;
+  width: 8px;
+  height: 100%;
+  cursor: e-resize;
+}
+
+.resize-handle.handle-l {
+  top: 0;
+  left: -3px;
+  width: 8px;
+  height: 100%;
+  cursor: w-resize;
+}
+
+.resize-handle.handle-b {
+  bottom: -3px;
+  left: 0;
+  width: 100%;
+  height: 8px;
+  cursor: s-resize;
+}
+
+.resize-handle.handle-t {
+  top: -3px;
+  left: 0;
+  width: 100%;
+  height: 8px;
+  cursor: n-resize;
+}
+
+.resize-handle.handle-br {
+  bottom: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: se-resize;
+  background: linear-gradient(135deg, transparent 50%, rgba(148, 163, 184, 0.4) 50%);
+  border-bottom-right-radius: 0.75rem;
+}
+
+.resize-handle.handle-br:hover {
+  background: linear-gradient(135deg, transparent 50%, rgba(56, 189, 248, 0.9) 50%);
+}
+
+.resize-handle.handle-bl {
+  bottom: 0;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  cursor: sw-resize;
+}
+
+.resize-handle.handle-tr {
+  top: 0;
+  right: 0;
+  width: 16px;
+  height: 16px;
+  cursor: ne-resize;
+}
+
+.resize-handle.handle-tl {
+  top: 0;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nw-resize;
+}
+
+/* Shield IFrames, Canvases, and Embeds during drag & resize operations */
+.app-window.is-resizing iframe,
+.app-window.is-dragging iframe,
+.app-window.is-resizing canvas,
+.app-window.is-dragging canvas,
+.app-window.is-resizing embed,
+.app-window.is-dragging embed,
+body.is-window-resizing iframe,
+body.is-window-resizing canvas {
+  pointer-events: none !important;
+}
+
+/* Start Menu Animation */
+#start-menu.show {
+  display: block;
+  opacity: 1;
+  transform: scale(1) translateY(0);
+}
+
+/* Xterm Overrides */
+.xterm {
+  padding: 8px;
+  height: 100% !important;
+}
+
+.xterm-viewport {
+  background-color: #000000 !important;
+}
+
+/* Dock Item Styling */
+.dock-item {
+  transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.dock-item:hover {
+  transform: translateY(-6px) scale(1.15);
+}
+
+.dock-item.running::after {
+  content: '';
+  position: absolute;
+  bottom: -3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 5px;
+  height: 5px;
+  background-color: #38bdf8;
+  border-radius: 9999px;
+  box-shadow: 0 0 8px #38bdf8;
+}
+
+/* Context Menu Items */
+.ctx-item {
+  transition: background-color 0.1s ease;
+}
+
+/* Desktop Icon Dragging & Absolute Positioning */
+.desktop-icon {
+  user-select: none;
+  -webkit-user-drag: none;
+  touch-action: none;
+  cursor: grab;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.desktop-icon:active, .desktop-icon.is-dragging {
+  cursor: grabbing !important;
+  opacity: 0.9;
+  transform: scale(1.08);
+  transition: none !important;
+  z-index: 40 !important;
+}
+
+/* Window Responsive Safety Clamping */
+@media (max-width: 768px) {
+  .app-window {
+    width: calc(100vw - 16px) !important;
+    height: calc(100vh - 90px) !important;
+    top: 36px !important;
+    left: 8px !important;
+  }
+}
+
+/* Task Manager Tabs */
+.tm-tab-btn.active {
+  background-color: rgba(30, 41, 59, 0.9) !important;
+  color: #38bdf8 !important;
+  font-weight: 600 !important;
+  border-left: 3px solid #38bdf8 !important;
+}
+

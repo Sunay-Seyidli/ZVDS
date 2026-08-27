@@ -1,0 +1,6 @@
+{
+  "name": "WebOS Cloud System",
+  "description": "Cloud-based operating system with Node.js Express, Socket.io, node-pty terminal, and file manager",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

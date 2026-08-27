@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WebOS Cloud Operating System</title>
+  
+  <!-- Tailwind CSS CDN for utility styling -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Xterm.js CSS and Scripts for Real Terminal -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+  
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  
+  <!-- Socket.io Client Script (Served by Socket.io server) -->
+  <script src="/socket.io/socket.io.js"></script>
+
+  <!-- Chart.js for Real-Time Task Manager Charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- WebOS Custom Styles -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="select-none overflow-hidden text-slate-100 font-sans bg-slate-950 antialiased">
+
+  <!-- Desktop Environment Canvas -->
+  <div id="desktop" class="relative w-screen h-screen overflow-hidden bg-cover bg-center transition-all duration-700 wallpaper-nebula">
+
+    <!-- Top System Navigation Bar -->
+    <header class="h-8 w-full bg-slate-900/80 backdrop-blur-md border-b border-slate-700/40 px-4 flex items-center justify-between z-50 text-xs text-slate-300">
+      <div class="flex items-center space-x-4">
+        <!-- WebOS Start Logo -->
+        <button id="start-btn" class="flex items-center space-x-2 font-bold text-sky-400 hover:text-sky-300 transition-colors py-1 px-2 rounded-lg hover:bg-slate-800/60">
+          <i class="fa-solid fa-cube text-sm"></i>
+          <span>WebOS Cloud</span>
+        </button>
+
+        <!-- Active App Label -->
+        <div class="h-4 w-px bg-slate-700/60"></div>
+        <span id="active-app-title" class="text-slate-400 font-medium flex items-center space-x-1.5">
+          <i class="fa-solid fa-desktop text-slate-500"></i>
+          <span>Masaüstü</span>
+        </span>
+      </div>
+
+      <!-- System Quick Status Controls -->
+      <div class="flex items-center space-x-4">
+        <span class="flex items-center space-x-1.5 text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2.5 py-0.5 rounded-full text-[10px] font-medium shadow-sm">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Bulut Bağlantısı Aktif</span>
+        </span>
+
+        <div class="flex items-center space-x-3 text-slate-400 border-l border-slate-800 pl-3">
+          <i class="fa-solid fa-wifi hover:text-slate-200 cursor-pointer transition-colors" title="Ağ Bağlantısı: Online"></i>
+          <i class="fa-solid fa-memory hover:text-slate-200 cursor-pointer transition-colors" id="top-mem-icon" title="Sistem Belleği"></i>
+          <span id="system-time" class="font-mono text-slate-200 font-semibold tracking-wide">00:00:00</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Desktop Icons Container (Draggable Icons) -->
+    <main id="desktop-grid" class="relative w-full h-[calc(100vh-80px)] mt-8 pointer-events-none z-10">
+      <!-- Terminal App Icon -->
+      <div class="desktop-icon pointer-events-auto group flex flex-col items-center cursor-pointer p-2 rounded-xl hover:bg-slate-800/40 transition-all duration-200" data-app="terminal">
+        <div class="w-14 h-14 bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-sky-400 group-hover:shadow-sky-500/20 transition-all duration-200">
+          <i class="fa-solid fa-terminal text-2xl text-sky-400"></i>
+        </div>
+        <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-sky-300">Terminal</span>
+      </div>
+
+      <!-- File Manager Icon -->
+      <div class="desktop-icon pointer-events-auto group flex flex-col items-center cursor-pointer p-2 rounded-xl hover:bg-slate-800/40 transition-all duration-200" data-app="files">
+        <div class="w-14 h-14 bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-amber-400 group-hover:shadow-amber-500/20 transition-all duration-200">
+          <i class="fa-solid fa-folder-closed text-2xl text-amber-400"></i>
+        </div>
+        <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-amber-300">Dosya Yöneticisi</span>
+      </div>
+
+      <!-- Notepad / Text Editor Icon -->
+      <div class="desktop-icon pointer-events-auto group flex flex-col items-center cursor-pointer p-2 rounded-xl hover:bg-slate-800/40 transition-all duration-200" data-app="editor">
+        <div class="w-14 h-14 bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-emerald-400 group-hover:shadow-emerald-500/20 transition-all duration-200">
+          <i class="fa-solid fa-note-sticky text-2xl text-emerald-400"></i>
+        </div>
+        <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-emerald-300">Not Defteri</span>
+      </div>
+
+      <!-- System Monitor Icon -->
+      <div class="desktop-icon pointer-events-auto group flex flex-col items-center cursor-pointer p-2 rounded-xl hover:bg-slate-800/40 transition-all duration-200" data-app="monitor">
+        <div class="w-14 h-14 bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-purple-400 group-hover:shadow-purple-500/20 transition-all duration-200">
+          <i class="fa-solid fa-chart-pie text-2xl text-purple-400"></i>
+        </div>
+        <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-purple-300">Sistem Monitörü</span>
+      </div>
+
+      <!-- Google Chrome App Icon -->
+      <div class="desktop-icon pointer-events-auto group flex flex-col items-center cursor-pointer p-2 rounded-xl hover:bg-slate-800/40 transition-all duration-200" data-app="chrome">
+        <div class="w-14 h-14 bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-blue-400 group-hover:shadow-blue-500/20 transition-all duration-200">
+          <i class="fa-brands fa-chrome text-2xl text-blue-400"></i>
+        </div>
+        <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-blue-300">Google Chrome</span>
+      </div>
+
+      <!-- Software Center / Yazılım Yöneticisi Icon -->
+      <div class="desktop-icon pointer-events-auto group flex flex-col items-center cursor-pointer p-2 rounded-xl hover:bg-slate-800/40 transition-all duration-200" data-app="software">
+        <div class="w-14 h-14 bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-teal-400 group-hover:shadow-teal-500/20 transition-all duration-200">
+          <i class="fa-solid fa-box-open text-2xl text-teal-400"></i>
+        </div>
+        <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-teal-300">Yazılım Yöneticisi</span>
+      </div>
+
+      <!-- Settings Icon -->
+      <div class="desktop-icon pointer-events-auto group flex flex-col items-center cursor-pointer p-2 rounded-xl hover:bg-slate-800/40 transition-all duration-200" data-app="settings">
+        <div class="w-14 h-14 bg-slate-900/80 backdrop-blur-md border border-slate-700/60 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-rose-400 group-hover:shadow-rose-500/20 transition-all duration-200">
+          <i class="fa-solid fa-gear text-2xl text-rose-400"></i>
+        </div>
+        <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-rose-300">Ayarlar</span>
+      </div>
+    </main>
+
+    <!-- Start Menu Drawer -->
+    <div id="start-menu" class="hidden absolute bottom-16 left-4 w-80 bg-slate-900/95 border border-slate-700/80 backdrop-blur-2xl rounded-2xl shadow-2xl z-50 p-4 transform transition-all duration-200 scale-95 opacity-0">
+      <div class="border-b border-slate-800/80 pb-3 mb-3 flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-sky-500 via-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+            WOS
+          </div>
+          <div>
+            <p class="text-sm font-semibold text-slate-100">Bulut Kullanıcısı</p>
+            <p class="text-[10px] text-emerald-400 font-mono">● Render.com Cloud Active</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="space-y-1">
+        <button class="menu-app-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800/80 hover:text-sky-400 transition-colors group" data-app="terminal">
+          <div class="w-7 h-7 rounded-lg bg-sky-950/60 border border-sky-800/50 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-terminal text-sky-400"></i>
+          </div>
+          <span>Bash Terminal Oturumu</span>
+        </button>
+
+        <button class="menu-app-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800/80 hover:text-amber-400 transition-colors group" data-app="files">
+          <div class="w-7 h-7 rounded-lg bg-amber-950/60 border border-amber-800/50 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-folder text-amber-400"></i>
+          </div>
+          <span>Dosya Yöneticisi</span>
+        </button>
+
+        <button class="menu-app-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800/80 hover:text-emerald-400 transition-colors group" data-app="editor">
+          <div class="w-7 h-7 rounded-lg bg-emerald-950/60 border border-emerald-800/50 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-note-sticky text-emerald-400"></i>
+          </div>
+          <span>Not Defteri & Editör</span>
+        </button>
+
+        <button class="menu-app-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800/80 hover:text-purple-400 transition-colors group" data-app="monitor">
+          <div class="w-7 h-7 rounded-lg bg-purple-950/60 border border-purple-800/50 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-chart-pie text-purple-400"></i>
+          </div>
+          <span>Sistem Kaynak Monitörü</span>
+        </button>
+
+        <button class="menu-app-item w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800/80 hover:text-rose-400 transition-colors group" data-app="settings">
+          <div class="w-7 h-7 rounded-lg bg-rose-950/60 border border-rose-800/50 flex items-center justify-center group-hover:scale-110 transition-transform">
+            <i class="fa-solid fa-sliders text-rose-400"></i>
+          </div>
+          <span>Masaüstü & Tema Ayarları</span>
+        </button>
+      </div>
+
+      <div class="border-t border-slate-800/80 mt-3 pt-3 flex justify-between items-center text-[11px] text-slate-400">
+        <span>WebOS v1.0 Cloud</span>
+        <button id="btn-desktop-refresh" class="hover:text-slate-200 transition-colors flex items-center space-x-1">
+          <i class="fa-solid fa-rotate-right"></i>
+          <span>Yenile</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- WINDOW CONTAINER AREA -->
+    <div id="windows-container" class="absolute inset-0 pointer-events-none pt-8 pb-16">
+      
+      <!-- 1. TERMINAL WINDOW -->
+      <div id="win-terminal" class="app-window absolute hidden pointer-events-auto bg-slate-950 border border-slate-800 rounded-xl shadow-2xl flex flex-col overflow-hidden min-w-[480px] min-h-[320px] w-[750px] h-[480px] top-12 left-20">
+        <div class="window-header h-9 bg-slate-900 border-b border-slate-800 px-3 flex items-center justify-between cursor-move select-none">
+          <div class="flex items-center space-x-2">
+            <button class="win-btn-close w-3 h-3 rounded-full bg-rose-500 hover:bg-rose-600 transition-colors shadow-sm"></button>
+            <button class="win-btn-min w-3 h-3 rounded-full bg-amber-500 hover:bg-amber-600 transition-colors shadow-sm"></button>
+            <button class="win-btn-max w-3 h-3 rounded-full bg-emerald-500 hover:bg-emerald-600 transition-colors shadow-sm"></button>
+            <span class="text-xs font-semibold text-slate-300 ml-2 flex items-center space-x-1.5">
+              <i class="fa-solid fa-terminal text-sky-400"></i>
+              <span>Terminal (/bin/bash)</span>
+            </span>
+          </div>
+          <div class="flex items-center space-x-2 text-xs">
+            <button id="term-clear-btn" title="Ekranı Temizle" class="text-slate-400 hover:text-slate-200 px-2 py-0.5 rounded bg-slate-800 border border-slate-700/60 transition-colors">
+              <i class="fa-solid fa-eraser"></i>
+            </button>
+          </div>
+        </div>
+        <div class="flex-1 bg-black p-2 relative overflow-hidden">
+          <div id="xterm-container" class="w-full h-full"></div>
+        </div>
+        <!-- Custom Resize Handles -->
+        <div class="resize-handle handle-r"></div>
+        <div class="resize-handle handle-b"></div>
+        <div class="resize-handle handle-br"></div>
+      </div>
+
+      <!-- 2. FILE MANAGER WINDOW -->
+      <div id="win-files" class="app-window absolute hidden pointer-events-auto bg-slate-900 border border-slate-800 rounded-xl shadow-2xl flex flex-col overflow-hidden min-w-[580px] min-h-[380px] w-[820px] h-[520px] top-16 left-32">
+        <div class="window-header h-9 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between cursor-move select-none">
+          <div class="flex items-center space-x-2">
+            <button class="win-btn-close w-3 h-3 rounded-full bg-rose-500 hover:bg-rose-600"></button>
+            <button class="win-btn-min w-3 h-3 rounded-full bg-amber-500 hover:bg-amber-600"></button>
+            <button class="win-btn-max w-3 h-3 rounded-full bg-emerald-500 hover:bg-emerald-600"></button>
+            <span class="text-xs font-semibold text-slate-300 ml-2 flex items-center space-x-1.5">
+              <i class="fa-solid fa-folder text-amber-400"></i>
+              <span>Dosya Yöneticisi</span>
+            </span>
+          </div>
+          <!-- File Actions Toolbar -->
+          <div class="flex items-center space-x-2 text-xs">
+            <button id="fm-upload-btn" class="px-2.5 py-1 bg-sky-900/80 hover:bg-sky-600 text-sky-200 hover:text-white rounded-md border border-sky-700/80 flex items-center space-x-1.5 transition-colors shadow-sm">
+              <i class="fa-solid fa-cloud-arrow-up"></i>
+              <span>Dosya Yükle</span>
+            </button>
+            <input type="file" id="fm-upload-input" multiple class="hidden" />
+            <button id="fm-new-file" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md border border-slate-700/80 flex items-center space-x-1.5 transition-colors">
+              <i class="fa-solid fa-file-circle-plus text-emerald-400"></i>
+              <span>Yeni Dosya</span>
+            </button>
+            <button id="fm-new-folder" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md border border-slate-700/80 flex items-center space-x-1.5 transition-colors">
+              <i class="fa-solid fa-folder-plus text-amber-400"></i>
+              <span>Yeni Klasör</span>
+            </button>
+            <button id="fm-refresh" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md border border-slate-700/80 transition-colors" title="Yenile">
+              <i class="fa-solid fa-rotate-right"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- Breadcrumb & Search Bar -->
+        <div class="h-10 bg-slate-900 border-b border-slate-800/80 px-4 flex items-center justify-between text-xs space-x-3">
+          <div class="flex items-center space-x-1.5 text-slate-300 overflow-x-auto flex-1" id="fm-breadcrumbs">
+            <button class="hover:text-sky-400 font-bold p-1 rounded hover:bg-slate-800 flex items-center space-x-1" id="fm-btn-home">
+              <i class="fa-solid fa-house text-sky-400"></i>
+            </button>
+            <span class="text-slate-600">/</span>
+            <div id="fm-path-segments" class="flex items-center space-x-1"></div>
+          </div>
+
+          <!-- Search Input Filter -->
+          <div class="relative w-48">
+            <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2 text-slate-500 text-[11px]"></i>
+            <input type="text" id="fm-search-input" placeholder="Dosyalarda ara..." class="w-full bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-lg pl-8 pr-2 py-1 outline-none focus:border-sky-500 transition-colors" />
+          </div>
+        </div>
+
+        <!-- File List View (with Drag & Drop Overlay support) -->
+        <div class="flex-1 overflow-y-auto p-4 bg-slate-950/60 relative" id="fm-container">
+          <!-- Drag-and-Drop Overlay -->
+          <div id="fm-drag-overlay" class="hidden absolute inset-0 bg-sky-950/90 border-2 border-dashed border-sky-400 rounded-xl flex flex-col items-center justify-center text-sky-200 z-30 pointer-events-none backdrop-blur-sm transition-all">
+            <i class="fa-solid fa-cloud-arrow-up text-5xl mb-3 animate-bounce text-sky-400"></i>
+            <p class="text-sm font-semibold">Dosyaları Buraya Bırakın</p>
+            <p class="text-xs text-sky-400/80 mt-1">Seçilen dosyalar VDS sunucusuna yüklenecektir</p>
+          </div>
+
+          <div class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3" id="fm-grid">
+            <!-- Files & Folders injected dynamically via JS -->
+          </div>
+        </div>
+
+        <!-- File Status Bar -->
+        <div class="h-6 bg-slate-950 border-t border-slate-800 px-3 flex items-center justify-between text-[11px] text-slate-400">
+          <span id="fm-status-count">0 öge</span>
+          <span id="fm-status-path" class="font-mono text-slate-500 truncate max-w-xs">/</span>
+        </div>
+
+        <!-- Custom Resize Handles -->
+        <div class="resize-handle handle-r"></div>
+        <div class="resize-handle handle-b"></div>
+        <div class="resize-handle handle-br"></div>
+      </div>
+
+      <!-- 3. NOTEPAD / TEXT EDITOR WINDOW -->
+      <div id="win-editor" class="app-window absolute hidden pointer-events-auto bg-slate-900 border border-slate-800 rounded-xl shadow-2xl flex flex-col overflow-hidden min-w-[500px] min-h-[350px] w-[740px] h-[490px] top-20 left-44">
+        <div class="window-header h-9 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between cursor-move select-none">
+          <div class="flex items-center space-x-2">
+            <button class="win-btn-close w-3 h-3 rounded-full bg-rose-500 hover:bg-rose-600"></button>
+            <button class="win-btn-min w-3 h-3 rounded-full bg-amber-500 hover:bg-amber-600"></button>
+            <button class="win-btn-max w-3 h-3 rounded-full bg-emerald-500 hover:bg-emerald-600"></button>
+            <span class="text-xs font-semibold text-slate-300 ml-2 flex items-center space-x-1.5">
+              <i class="fa-solid fa-note-sticky text-emerald-400"></i>
+              <span id="editor-filename">isimsiz.txt</span>
+            </span>
+            <span id="editor-dirty-badge" class="hidden text-[10px] bg-amber-950 text-amber-400 border border-amber-800 px-1.5 py-0.2 rounded font-mono">Değiştirildi *</span>
+          </div>
+          <div class="flex items-center space-x-2 text-xs">
+            <button id="editor-new-btn" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md border border-slate-700/80 flex items-center space-x-1 transition-colors" title="Yeni Boş Belge">
+              <i class="fa-solid fa-plus text-sky-400"></i>
+              <span>Yeni</span>
+            </button>
+            <button id="editor-save-btn" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-md flex items-center space-x-1.5 transition-colors shadow-sm">
+              <i class="fa-solid fa-floppy-disk"></i>
+              <span>Kaydet (Ctrl+S)</span>
+            </button>
+          </div>
+        </div>
+        <div class="flex-1 flex flex-col bg-slate-950 relative">
+          <textarea id="editor-textarea" class="w-full flex-1 p-4 bg-slate-950 text-slate-100 font-mono text-sm leading-relaxed outline-none resize-none border-none selection:bg-sky-500/30" placeholder="Buraya yazın veya Dosya Yöneticisi'nden çift tıklayarak bir dosya açın..."></textarea>
+        </div>
+        <div class="h-6 bg-slate-900 border-t border-slate-800 px-3 flex items-center justify-between text-[11px] text-slate-400">
+          <span id="editor-path-label" class="font-mono text-slate-500 truncate max-w-sm">Yeni Dosya</span>
+          <div class="flex items-center space-x-4">
+            <span id="editor-line-count">1 Satır</span>
+            <span id="editor-char-count">0 Karakter</span>
+          </div>
+        </div>
+
+        <!-- Custom Resize Handles -->
+        <div class="resize-handle handle-r"></div>
+        <div class="resize-handle handle-b"></div>
+        <div class="resize-handle handle-br"></div>
+      </div>
+
+      <!-- 4. SYSTEM MONITOR / TASK MANAGER WINDOW (Windows 11 Style) -->
+      <div id="win-monitor" class="app-window absolute hidden pointer-events-auto bg-slate-900 border border-slate-800 rounded-xl shadow-2xl flex flex-col overflow-hidden min-w-[620px] min-h-[460px] w-[860px] h-[580px] top-20 left-48">
+        <div class="window-header h-9 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between cursor-move select-none">
+          <div class="flex items-center space-x-2">
+            <button class="win-btn-close w-3 h-3 rounded-full bg-rose-500 hover:bg-rose-600"></button>
+            <button class="win-btn-min w-3 h-3 rounded-full bg-amber-500 hover:bg-amber-600"></button>
+            <button class="win-btn-max w-3 h-3 rounded-full bg-emerald-500 hover:bg-emerald-600"></button>
+            <span class="text-xs font-semibold text-slate-300 ml-2 flex items-center space-x-1.5">
+              <i class="fa-solid fa-chart-line text-purple-400"></i>
+              <span>Görev Yöneticisi</span>
+            </span>
+          </div>
+          <span class="text-[10px] text-emerald-400 font-mono bg-emerald-950 border border-emerald-800/60 px-2 py-0.5 rounded-full flex items-center space-x-1">
+            <span class="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping"></span>
+            <span>Canlı VDS Metrikleri</span>
+          </span>
+        </div>
+
+        <!-- Main Task Manager Container (Sidebar + Content) -->
+        <div class="flex-1 flex overflow-hidden bg-slate-950">
+          
+          <!-- Left Vertical Sidebar Tabs (Windows 11 Style) -->
+          <div class="w-44 bg-slate-900/90 border-r border-slate-800 p-2 flex flex-col space-y-1 select-none flex-shrink-0">
+            <button class="tm-tab-btn active w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-xs font-medium text-slate-300 hover:bg-slate-800/80 transition-all text-left" data-tab="perf">
+              <i class="fa-solid fa-chart-line text-sky-400 text-sm w-4 text-center"></i>
+              <span>Performans</span>
+            </button>
+
+            <button class="tm-tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800/80 transition-all text-left" data-tab="procs">
+              <i class="fa-solid fa-list-check text-emerald-400 text-sm w-4 text-center"></i>
+              <span>İşlemler</span>
+            </button>
+
+            <div class="flex-1"></div>
+
+            <!-- Hardware Specs Summary Sidebar Footer -->
+            <div class="pt-2 border-t border-slate-800 text-[10px] text-slate-500 space-y-1 px-1">
+              <p class="font-semibold text-slate-400 truncate" id="tm-side-cpu">-</p>
+              <p id="tm-side-ram">RAM: -</p>
+              <p id="tm-side-disk">Disk: -</p>
+            </div>
+          </div>
+
+          <!-- Right Content Area -->
+          <div class="flex-1 flex flex-col overflow-hidden relative p-4 bg-slate-950">
+            
+            <!-- TAB 1: PERFORMANS (Charts & Gauges) -->
+            <div id="tm-view-perf" class="tm-view flex-1 flex flex-col space-y-4 overflow-y-auto pr-1">
+              
+              <!-- Cards Grid (CPU, RAM, Disk) -->
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <!-- CPU Card -->
+                <div class="bg-slate-900/90 border border-slate-800/80 rounded-xl p-3 shadow-sm flex flex-col justify-between min-h-[170px]">
+                  <div>
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
+                        <i class="fa-solid fa-microchip text-sky-400"></i>
+                        <span>İşlemci (CPU)</span>
+                      </span>
+                      <span id="sys-cpu-percent" class="text-xs font-bold text-sky-400">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden my-2">
+                      <div id="sys-cpu-bar" class="bg-sky-400 h-full w-0 transition-all duration-300"></div>
+                    </div>
+                  </div>
+                  <!-- CPU Mini Chart Container -->
+                  <div class="h-20 w-full relative mt-1">
+                    <canvas id="chart-cpu"></canvas>
+                  </div>
+                  <p id="sys-cpu-model" class="text-[10px] text-slate-400 mt-2 truncate font-mono">Yükleniyor...</p>
+                </div>
+
+                <!-- Memory Card -->
+                <div class="bg-slate-900/90 border border-slate-800/80 rounded-xl p-3 shadow-sm flex flex-col justify-between min-h-[170px]">
+                  <div>
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
+                        <i class="fa-solid fa-memory text-purple-400"></i>
+                        <span>Bellek (RAM)</span>
+                      </span>
+                      <span id="sys-mem-percent" class="text-xs font-bold text-purple-400">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden my-2">
+                      <div id="sys-mem-bar" class="bg-purple-500 h-full w-0 transition-all duration-300"></div>
+                    </div>
+                  </div>
+                  <!-- Memory Mini Chart Container -->
+                  <div class="h-20 w-full relative mt-1">
+                    <canvas id="chart-ram"></canvas>
+                  </div>
+                  <p id="sys-mem-text" class="text-[10px] text-slate-400 mt-2 truncate font-mono">0 MB / 0 MB</p>
+                </div>
+
+                <!-- Disk Card -->
+                <div class="bg-slate-900/90 border border-slate-800/80 rounded-xl p-3 shadow-sm flex flex-col justify-between min-h-[170px]">
+                  <div>
+                    <div class="flex items-center justify-between">
+                      <span class="text-xs font-semibold text-slate-300 flex items-center space-x-1.5">
+                        <i class="fa-solid fa-hard-drive text-amber-400"></i>
+                        <span>Disk Kullanımı</span>
+                      </span>
+                      <span id="sys-disk-percent" class="text-xs font-bold text-amber-400">0%</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden my-2">
+                      <div id="sys-disk-bar" class="bg-amber-400 h-full w-0 transition-all duration-300"></div>
+                    </div>
+                  </div>
+                  <!-- Disk Mini Chart Container -->
+                  <div class="h-20 w-full relative mt-1">
+                    <canvas id="chart-disk"></canvas>
+                  </div>
+                  <p id="sys-disk-text" class="text-[10px] text-slate-400 mt-2 truncate font-mono">0 GB / 0 GB</p>
+                </div>
+              </div>
+
+              <!-- Fixed Bottom Hardware Specs Bar -->
+              <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-3 text-xs flex items-center justify-between text-slate-300 shadow-sm mt-auto">
+                <div class="flex items-center space-x-2 truncate mr-2">
+                  <i class="fa-solid fa-server text-indigo-400 text-sm"></i>
+                  <span id="tm-footer-cpu" class="font-semibold text-slate-200 truncate">Intel / AMD Processor</span>
+                </div>
+                <div class="flex items-center space-x-4 font-mono text-[11px] text-slate-400 flex-shrink-0">
+                  <span id="tm-footer-cores">Çekirdek: -</span>
+                  <span id="tm-footer-ram">RAM: - GB</span>
+                  <span id="tm-footer-disk">Disk: - GB</span>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- TAB 2: İŞLEMLER (Processes View) -->
+            <div id="tm-view-procs" class="tm-view hidden flex-1 flex flex-col overflow-hidden">
+              <!-- Toolbar & Filter -->
+              <div class="flex items-center justify-between mb-3">
+                <div class="relative w-64">
+                  <i class="fa-solid fa-magnifying-glass absolute left-2.5 top-2.5 text-slate-500 text-[11px]"></i>
+                  <input type="text" id="proc-search-input" placeholder="İşlem adı veya PID ara..." class="w-full bg-slate-900 border border-slate-800 text-slate-200 text-xs rounded-lg pl-8 pr-2 py-1.5 outline-none focus:border-emerald-500 transition-colors" />
+                </div>
+                <div class="flex items-center space-x-3 text-xs">
+                  <span id="proc-count" class="text-[11px] bg-slate-900 text-emerald-400 border border-emerald-800/60 px-2.5 py-1 rounded-lg font-mono">0 İşlem</span>
+                </div>
+              </div>
+
+              <!-- Process Table -->
+              <div class="flex-1 overflow-y-auto border border-slate-800 rounded-xl bg-slate-900/60">
+                <table class="w-full text-left text-xs text-slate-300">
+                  <thead class="bg-slate-950 text-[11px] text-slate-400 sticky top-0 border-b border-slate-800 z-10">
+                    <tr>
+                      <th class="p-2.5">PID</th>
+                      <th class="p-2.5">Uygulama Adı</th>
+                      <th class="p-2.5">CPU %</th>
+                      <th class="p-2.5">Bellek (RAM)</th>
+                      <th class="p-2.5 text-right">Aksiyon</th>
+                    </tr>
+                  </thead>
+                  <tbody id="proc-table-body" class="divide-y divide-slate-800/60 font-mono">
+                    <!-- Dynamic Process Rows -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+
+        <!-- Custom Resize Handles -->
+        <div class="resize-handle handle-r"></div>
+        <div class="resize-handle handle-b"></div>
+        <div class="resize-handle handle-br"></div>
+      </div>
+
+      <!-- 5. SETTINGS WINDOW -->
+      <div id="win-settings" class="app-window absolute hidden pointer-events-auto bg-slate-900 border border-slate-800 rounded-xl shadow-2xl flex flex-col overflow-hidden min-w-[420px] min-h-[300px] w-[520px] h-[380px] top-28 left-64">
+        <div class="window-header h-9 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between cursor-move select-none">
+          <div class="flex items-center space-x-2">
+            <button class="win-btn-close w-3 h-3 rounded-full bg-rose-500 hover:bg-rose-600"></button>
+            <button class="win-btn-min w-3 h-3 rounded-full bg-amber-500 hover:bg-amber-600"></button>
+            <button class="win-btn-max w-3 h-3 rounded-full bg-emerald-500 hover:bg-emerald-600"></button>
+            <span class="text-xs font-semibold text-slate-300 ml-2 flex items-center space-x-1.5">
+              <i class="fa-solid fa-sliders text-rose-400"></i>
+              <span>Masaüstü Ayarları</span>
+            </span>
+          </div>
+        </div>
+        <div class="flex-1 p-5 overflow-y-auto space-y-4 bg-slate-950">
+          <div>
+            <h4 class="text-xs font-semibold text-slate-300 mb-3">Masaüstü Duvar Kağıdı Teması</h4>
+            <div class="grid grid-cols-2 gap-3">
+              <button class="wallpaper-opt border-2 border-sky-500 rounded-xl p-2.5 bg-slate-900 flex items-center space-x-3 text-xs font-medium text-slate-200 hover:border-sky-400 transition-all" data-theme="nebula">
+                <div class="w-8 h-8 rounded-lg wallpaper-nebula shadow"></div>
+                <span>Karanlık Nebula</span>
+              </button>
+              <button class="wallpaper-opt border-2 border-transparent hover:border-slate-700 rounded-xl p-2.5 bg-slate-900 flex items-center space-x-3 text-xs font-medium text-slate-200 transition-all" data-theme="cyberpunk">
+                <div class="w-8 h-8 rounded-lg wallpaper-cyberpunk shadow"></div>
+                <span>Siber Izgara</span>
+              </button>
+              <button class="wallpaper-opt border-2 border-transparent hover:border-slate-700 rounded-xl p-2.5 bg-slate-900 flex items-center space-x-3 text-xs font-medium text-slate-200 transition-all" data-theme="sunset">
+                <div class="w-8 h-8 rounded-lg wallpaper-sunset shadow"></div>
+                <span>Gece Dağları</span>
+              </button>
+              <button class="wallpaper-opt border-2 border-transparent hover:border-slate-700 rounded-xl p-2.5 bg-slate-900 flex items-center space-x-3 text-xs font-medium text-slate-200 transition-all" data-theme="minimal">
+                <div class="w-8 h-8 rounded-lg wallpaper-minimal shadow"></div>
+                <span>Minimalist Koyu</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom Resize Handles -->
+        <div class="resize-handle handle-r"></div>
+        <div class="resize-handle handle-b"></div>
+        <div class="resize-handle handle-br"></div>
+      </div>
+
+      <!-- 6. GOOGLE CHROME WEB BROWSER WINDOW -->
+      <div id="win-chrome" class="app-window absolute hidden pointer-events-auto bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl flex flex-col overflow-hidden min-w-[500px] min-h-[350px] w-[980px] h-[640px] top-10 left-20">
+        <div class="window-header h-9 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between cursor-move select-none">
+          <div class="flex items-center space-x-2">
+            <button class="win-btn-close w-3 h-3 rounded-full bg-rose-500 hover:bg-rose-600"></button>
+            <button class="win-btn-min w-3 h-3 rounded-full bg-amber-500 hover:bg-amber-600"></button>
+            <button class="win-btn-max w-3 h-3 rounded-full bg-emerald-500 hover:bg-emerald-600"></button>
+            <span class="text-xs font-semibold text-slate-300 ml-2 flex items-center space-x-1.5">
+              <i class="fa-brands fa-chrome text-blue-400"></i>
+              <span>Google Chrome (WebOS Internet Tarayıcısı)</span>
+            </span>
+          </div>
+          <div class="flex items-center space-x-2 text-[10px]">
+            <span class="px-2 py-0.5 bg-blue-950/80 text-blue-400 border border-blue-800 rounded font-mono">WEB PROXY INTEGRATED</span>
+          </div>
+        </div>
+
+        <!-- Chrome Address & Navigation Bar -->
+        <div class="h-10 bg-slate-900 border-b border-slate-800 px-3 flex items-center space-x-2 text-xs">
+          <button id="chrome-btn-home" class="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors" title="Ana Sayfa">
+            <i class="fa-solid fa-house"></i>
+          </button>
+          <button id="chrome-btn-back" class="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors" title="Geri">
+            <i class="fa-solid fa-arrow-left"></i>
+          </button>
+          <button id="chrome-btn-forward" class="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors" title="İleri">
+            <i class="fa-solid fa-arrow-right"></i>
+          </button>
+          <button id="chrome-btn-reload" class="p-1.5 text-slate-400 hover:text-white rounded hover:bg-slate-800 transition-colors" title="Yenile">
+            <i class="fa-solid fa-rotate-right"></i>
+          </button>
+          <div class="flex-1 flex items-center bg-slate-950 border border-slate-800 rounded-lg px-3 py-1 space-x-2 focus-within:border-blue-500 transition-colors">
+            <i class="fa-solid fa-lock text-emerald-400 text-[10px]"></i>
+            <input type="text" id="chrome-url-input" value="https://www.google.com" class="w-full bg-transparent text-slate-200 font-sans text-xs focus:outline-none" placeholder="Adres girin veya Google'da arayın..." />
+          </div>
+          <button id="chrome-btn-go" class="px-3.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-medium text-xs transition-colors shadow-sm flex items-center space-x-1">
+            <i class="fa-solid fa-magnifying-glass text-[10px]"></i>
+            <span>Git</span>
+          </button>
+        </div>
+
+        <!-- Bookmarks Bar -->
+        <div class="h-7 bg-slate-950/80 border-b border-slate-800/80 px-3 flex items-center space-x-3 text-[11px] text-slate-300">
+          <span class="text-slate-500 font-semibold text-[10px] uppercase tracking-wider">Kısayollar:</span>
+          <button class="chrome-bm-btn hover:text-blue-400 transition-colors flex items-center space-x-1" data-url="https://www.google.com">
+            <i class="fa-brands fa-google text-blue-400"></i><span>Google</span>
+          </button>
+          <button class="chrome-bm-btn hover:text-red-400 transition-colors flex items-center space-x-1" data-url="https://www.youtube.com">
+            <i class="fa-brands fa-youtube text-red-500"></i><span>YouTube</span>
+          </button>
+          <button class="chrome-bm-btn hover:text-emerald-400 transition-colors flex items-center space-x-1" data-url="https://wikipedia.org">
+            <i class="fa-solid fa-book text-emerald-400"></i><span>Wikipedia</span>
+          </button>
+          <button class="chrome-bm-btn hover:text-slate-100 transition-colors flex items-center space-x-1" data-url="https://github.com">
+            <i class="fa-brands fa-github text-slate-200"></i><span>GitHub</span>
+          </button>
+          <button class="chrome-bm-btn hover:text-orange-400 transition-colors flex items-center space-x-1" data-url="https://duckduckgo.com">
+            <i class="fa-solid fa-shield-halved text-orange-400"></i><span>DuckDuckGo</span>
+          </button>
+        </div>
+
+        <!-- Chrome Viewport (Real VNC Canvas + Web Fallback Frame) -->
+        <div id="chrome-vnc-container" class="flex-1 bg-slate-950 relative overflow-hidden flex items-center justify-center select-none">
+          <canvas id="chrome-vnc-canvas" class="max-w-full max-h-full cursor-crosshair"></canvas>
+          <iframe id="chrome-iframe" class="w-full h-full border-0 hidden bg-white"></iframe>
+          <div id="chrome-vnc-status" class="absolute inset-0 bg-slate-950/90 backdrop-blur-sm flex flex-col items-center justify-center space-y-3 z-10 transition-opacity duration-300">
+            <div class="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin"></div>
+            <p class="text-xs font-medium text-slate-300">Google Chrome Başlatılıyor...</p>
+          </div>
+        </div>
+
+        <div class="resize-handle handle-r"></div>
+        <div class="resize-handle handle-b"></div>
+        <div class="resize-handle handle-br"></div>
+      </div>
+
+      <!-- 8. YAZILIM & PAKET YÖNETİCİSİ (SOFTWARE CENTER & APT / DEB INSTALLER) -->
+      <div id="win-software" class="app-window absolute hidden pointer-events-auto bg-slate-900 border border-slate-700/80 rounded-xl shadow-2xl flex flex-col overflow-hidden min-w-[650px] min-h-[450px] w-[950px] h-[620px] top-10 left-20">
+        <div class="window-header h-9 bg-slate-950 border-b border-slate-800 px-3 flex items-center justify-between cursor-move select-none">
+          <div class="flex items-center space-x-2">
+            <button class="win-btn-close w-3 h-3 rounded-full bg-rose-500 hover:bg-rose-600"></button>
+            <button class="win-btn-min w-3 h-3 rounded-full bg-amber-500 hover:bg-amber-600"></button>
+            <button class="win-btn-max w-3 h-3 rounded-full bg-emerald-500 hover:bg-emerald-600"></button>
+            <span class="text-xs font-semibold text-slate-300 ml-2 flex items-center space-x-1.5">
+              <i class="fa-solid fa-box-open text-teal-400"></i>
+              <span>Yazılım & Paket Yöneticisi (Linux APT + .deb & Windows .exe)</span>
+            </span>
+          </div>
+          <div class="flex items-center space-x-2 text-[10px]">
+            <span class="px-2 py-0.5 bg-emerald-950/80 text-emerald-400 border border-emerald-800 rounded font-mono">ROOT YETKİLİ VDS</span>
+          </div>
+        </div>
+
+        <!-- Software Center Header Sub-bar -->
+        <div class="bg-slate-900 border-b border-slate-800 p-3 flex flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center space-x-2">
+            <button id="sw-tab-store" class="sw-tab-btn active px-3 py-1.5 bg-teal-600 text-white text-xs font-medium rounded-lg shadow-sm transition-all flex items-center space-x-1.5">
+              <i class="fa-solid fa-store"></i>
+              <span>Uygulama Mağazası</span>
+            </button>
+            <button id="sw-tab-installer" class="sw-tab-btn px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-lg transition-all flex items-center space-x-1.5">
+              <i class="fa-solid fa-terminal"></i>
+              <span>Özel APT / .deb Kurucu</span>
+            </button>
+          </div>
+
+          <!-- Quick Apt Install Input -->
+          <div class="flex items-center space-x-2 flex-1 max-w-md">
+            <input type="text" id="sw-quick-apt-input" placeholder="Apt paket adı (örn: vlc, gimp, ffmpeg)..." class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-teal-500" />
+            <button id="sw-quick-apt-btn" class="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-medium whitespace-nowrap transition-colors flex items-center space-x-1">
+              <i class="fa-solid fa-download"></i>
+              <span>Yükle</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Main Body -->
+        <div class="flex-1 overflow-hidden flex flex-col bg-slate-950 p-4">
+
+          <!-- View 1: Store Cards Grid -->
+          <div id="sw-view-store" class="flex-1 overflow-y-auto space-y-4 pr-1">
+            <div class="flex items-center justify-between">
+              <div>
+                <h3 class="text-sm font-semibold text-slate-100">Popüler VDS Uygulamaları</h3>
+                <p class="text-xs text-slate-400">Tek tıkla Linux sunucunuza paket kurun ve VDS ekranında çalıştırın.</p>
+              </div>
+              <button id="sw-refresh-apps-btn" class="text-xs text-teal-400 hover:text-teal-300 flex items-center space-x-1">
+                <i class="fa-solid fa-rotate"></i>
+                <span>Durumu Yenile</span>
+              </button>
+            </div>
+
+            <!-- Apps Cards Grid Container -->
+            <div id="sw-apps-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              <!-- Dynamically populated via app.js -->
+            </div>
+          </div>
+
+          <!-- View 2: Custom Installer & Terminal Log View -->
+          <div id="sw-view-installer" class="hidden flex-1 flex flex-col space-y-3">
+            <div class="bg-slate-900 border border-slate-800 rounded-xl p-3 space-y-3">
+              <h4 class="text-xs font-semibold text-teal-400 uppercase tracking-wider">Manuel Paket Yükleyici (Root Privileged)</h4>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <!-- APT Install Box -->
+                <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-2">
+                  <label class="text-xs text-slate-300 font-medium block">Ubuntu APT Paket Adı:</label>
+                  <div class="flex space-x-2">
+                    <input type="text" id="sw-custom-pkg-input" placeholder="Paket adı (örn: neofetch, htop, curl)..." class="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-teal-500" />
+                    <button id="sw-custom-pkg-btn" class="px-3 py-1 bg-teal-600 hover:bg-teal-500 text-white rounded text-xs font-medium">apt install</button>
+                  </div>
+                </div>
+
+                <!-- DEB Install Box -->
+                <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-2">
+                  <label class="text-xs text-slate-300 font-medium block">Yüklü .deb Dosya Yolu:</label>
+                  <div class="flex space-x-2">
+                    <input type="text" id="sw-custom-deb-input" placeholder="/root/dosyalar/uygulama.deb..." class="flex-1 bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-teal-500" />
+                    <button id="sw-custom-deb-btn" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-medium">dpkg -i</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Live Streaming Log Box -->
+            <div class="flex-1 bg-slate-950 border border-slate-800 rounded-xl flex flex-col overflow-hidden">
+              <div class="bg-slate-900 border-b border-slate-800 px-3 py-1.5 flex items-center justify-between text-xs">
+                <span class="font-mono text-slate-300 flex items-center space-x-2">
+                  <i class="fa-solid fa-terminal text-teal-400"></i>
+                  <span>Canlı Kurulum Çıktısı (Socket.io Real-Time Log)</span>
+                </span>
+                <button id="sw-clear-log-btn" class="text-[10px] text-slate-400 hover:text-white bg-slate-800 px-2 py-0.5 rounded">
+                  Temizle
+                </button>
+              </div>
+              <pre id="sw-install-log-terminal" class="flex-1 p-3 font-mono text-[11px] text-emerald-400 overflow-y-auto whitespace-pre-wrap selection:bg-teal-800">Sistem hazır. Yükleme yapmak için yukarıdaki listeden veya arama çubuğundan bir uygulama seçin...</pre>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="resize-handle handle-r"></div>
+        <div class="resize-handle handle-b"></div>
+        <div class="resize-handle handle-br"></div>
+      </div>
+
+    </div>
+
+    <!-- BOTTOM TASKBAR & DOCK -->
+    <footer class="absolute bottom-0 left-0 right-0 h-12 bg-slate-900/80 backdrop-blur-md border-t border-slate-800 px-4 flex items-center justify-center z-50">
+      <div id="dock-container" class="flex items-center space-x-2 bg-slate-950/60 p-1.5 rounded-2xl border border-slate-800/80 shadow-2xl">
+        <!-- Dock Icons dynamically managed -->
+      </div>
+    </footer>
+
+    <!-- CONTEXT MENU (Process Row Right Click) -->
+    <div id="proc-context-menu" class="hidden fixed bg-slate-900/95 border border-slate-700/80 backdrop-blur-xl rounded-xl shadow-2xl z-50 py-1.5 w-52 text-xs text-slate-200">
+      <div class="px-3 py-1 text-[10px] text-slate-400 font-mono border-b border-slate-800 mb-1" id="ctx-proc-info">PID: -</div>
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-rose-600 hover:text-white flex items-center space-x-2 text-rose-400 transition-colors" id="ctx-proc-kill">
+        <i class="fa-solid fa-xmark w-4 text-center"></i>
+        <span>Görevi Sonlandır (End Task)</span>
+      </button>
+    </div>
+
+    <!-- CONTEXT MENU (Desktop Right Click) -->
+    <div id="desktop-context-menu" class="hidden fixed bg-slate-900/95 border border-slate-700/80 backdrop-blur-xl rounded-xl shadow-2xl z-50 py-1.5 w-48 text-xs text-slate-200">
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-sky-600 hover:text-white flex items-center space-x-2" id="ctx-new-file">
+        <i class="fa-solid fa-file-circle-plus text-emerald-400 w-4"></i>
+        <span>Yeni Dosya</span>
+      </button>
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-sky-600 hover:text-white flex items-center space-x-2" id="ctx-new-folder">
+        <i class="fa-solid fa-folder-plus text-amber-400 w-4"></i>
+        <span>Yeni Klasör</span>
+      </button>
+      <div class="border-t border-slate-800 my-1"></div>
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-sky-600 hover:text-white flex items-center space-x-2" id="ctx-refresh">
+        <i class="fa-solid fa-rotate-right text-sky-400 w-4"></i>
+        <span>Yenile</span>
+      </button>
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-sky-600 hover:text-white flex items-center space-x-2" id="ctx-open-terminal">
+        <i class="fa-solid fa-terminal text-purple-400 w-4"></i>
+        <span>Terminali Buradan Aç</span>
+      </button>
+    </div>
+
+    <!-- CONTEXT MENU (File Item Right Click) -->
+    <div id="file-context-menu" class="hidden fixed bg-slate-900/95 border border-slate-700/80 backdrop-blur-xl rounded-xl shadow-2xl z-50 py-1.5 w-52 text-xs text-slate-200">
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-sky-600 hover:text-white flex items-center space-x-2" id="ctx-file-open">
+        <i class="fa-solid fa-folder-open text-sky-400 w-4"></i>
+        <span>Aç</span>
+      </button>
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-sky-600 hover:text-white flex items-center space-x-2" id="ctx-file-wine">
+        <i class="fa-brands fa-windows text-indigo-400 w-4"></i>
+        <span>Wine ile Çalıştır (.exe)</span>
+      </button>
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-sky-600 hover:text-white flex items-center space-x-2" id="ctx-file-deb">
+        <i class="fa-solid fa-box-archive text-teal-400 w-4"></i>
+        <span>Paketi Kur (.deb)</span>
+      </button>
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-sky-600 hover:text-white flex items-center space-x-2" id="ctx-file-download">
+        <i class="fa-solid fa-download text-emerald-400 w-4"></i>
+        <span>İndir</span>
+      </button>
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-sky-600 hover:text-white flex items-center space-x-2" id="ctx-file-rename">
+        <i class="fa-solid fa-pen text-amber-400 w-4"></i>
+        <span>Yeniden Adlandır</span>
+      </button>
+      <div class="border-t border-slate-800 my-1"></div>
+      <button class="ctx-item w-full text-left px-3 py-2 hover:bg-rose-600 hover:text-white flex items-center space-x-2 text-rose-400" id="ctx-file-delete">
+        <i class="fa-solid fa-trash w-4"></i>
+        <span>Sil</span>
+      </button>
+    </div>
+
+  </div>
+
+  <!-- WebOS Client Logic Script -->
+  <script src="app.js"></script>
+</body>
+</html>
