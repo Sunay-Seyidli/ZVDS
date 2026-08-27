@@ -1718,15 +1718,17 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ==========================================
-  // 10. SOFTWARE CENTER & PACKAGE INSTALLER LOGIC
+  // 10. SOFTWARE CENTER & LIVE PACKAGE REGISTRY ENGINE (NPM / APT)
   // ==========================================
   let softwareCenterInitialized = false;
+  let dynamicDesktopApps = [];
 
   function initSoftwareCenter() {
     if (!softwareCenterInitialized) {
       setupSoftwareCenterTabs();
       setupSoftwareCenterEvents();
       setupSocketInstallListeners();
+      fetchDynamicDesktopApps();
       softwareCenterInitialized = true;
     }
     fetchInstalledApps();
@@ -1734,51 +1736,60 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function setupSoftwareCenterTabs() {
     const tabStoreBtn = document.getElementById('sw-tab-store');
+    const tabSearchBtn = document.getElementById('sw-tab-search');
     const tabInstallerBtn = document.getElementById('sw-tab-installer');
+    
     const viewStore = document.getElementById('sw-view-store');
+    const viewSearch = document.getElementById('sw-view-search');
     const viewInstaller = document.getElementById('sw-view-installer');
 
+    function resetTabs() {
+      [tabStoreBtn, tabSearchBtn, tabInstallerBtn].forEach(btn => {
+        btn?.classList.remove('bg-teal-600', 'text-white');
+        btn?.classList.add('bg-slate-800', 'text-slate-300');
+      });
+      [viewStore, viewSearch, viewInstaller].forEach(view => {
+        view?.classList.add('hidden');
+      });
+    }
+
     tabStoreBtn?.addEventListener('click', () => {
+      resetTabs();
       tabStoreBtn.classList.add('bg-teal-600', 'text-white');
       tabStoreBtn.classList.remove('bg-slate-800', 'text-slate-300');
-      tabInstallerBtn?.classList.add('bg-slate-800', 'text-slate-300');
-      tabInstallerBtn?.classList.remove('bg-teal-600', 'text-white');
-
       viewStore?.classList.remove('hidden');
-      viewInstaller?.classList.add('hidden');
+    });
+
+    tabSearchBtn?.addEventListener('click', () => {
+      resetTabs();
+      tabSearchBtn.classList.add('bg-teal-600', 'text-white');
+      tabSearchBtn.classList.remove('bg-slate-800', 'text-slate-300');
+      viewSearch?.classList.remove('hidden');
+      document.getElementById('sw-search-input')?.focus();
     });
 
     tabInstallerBtn?.addEventListener('click', () => {
+      resetTabs();
       tabInstallerBtn.classList.add('bg-teal-600', 'text-white');
       tabInstallerBtn.classList.remove('bg-slate-800', 'text-slate-300');
-      tabStoreBtn?.classList.add('bg-slate-800', 'text-slate-300');
-      tabStoreBtn?.classList.remove('bg-teal-600', 'text-white');
-
       viewInstaller?.classList.remove('hidden');
-      viewStore?.classList.add('hidden');
     });
   }
 
   function setupSoftwareCenterEvents() {
-    // Quick Apt Install Input
-    const quickBtn = document.getElementById('sw-quick-apt-btn');
-    const quickInput = document.getElementById('sw-quick-apt-input');
+    const searchInput = document.getElementById('sw-search-input');
+    const searchBtn = document.getElementById('sw-search-btn');
 
-    quickBtn?.addEventListener('click', () => {
-      const pkg = quickInput?.value.trim();
-      if (pkg) {
-        installLinuxPackage(pkg);
-        if (quickInput) quickInput.value = '';
-      }
+    // Trigger online package search
+    searchBtn?.addEventListener('click', () => {
+      const q = searchInput?.value.trim();
+      if (q) performOnlinePackageSearch(q);
     });
 
-    quickInput?.addEventListener('keydown', (e) => {
+    searchInput?.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        const pkg = quickInput?.value.trim();
-        if (pkg) {
-          installLinuxPackage(pkg);
-          if (quickInput) quickInput.value = '';
-        }
+        const q = searchInput?.value.trim();
+        if (q) performOnlinePackageSearch(q);
       }
     });
 
@@ -1803,13 +1814,251 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Refresh Apps
-    document.getElementById('sw-refresh-apps-btn')?.addEventListener('click', fetchInstalledApps);
+    document.getElementById('sw-refresh-apps-btn')?.addEventListener('click', () => {
+      fetchInstalledApps();
+      fetchDynamicDesktopApps();
+    });
 
     // Clear Terminal Log
     document.getElementById('sw-clear-log-btn')?.addEventListener('click', () => {
       const term = document.getElementById('sw-install-log-terminal');
       if (term) term.textContent = 'Loglar temizlendi.\n';
     });
+  }
+
+  // Live search packages via server-side registry proxy
+  async function performOnlinePackageSearch(query) {
+    const searchTab = document.getElementById('sw-tab-search');
+    const resultsGrid = document.getElementById('sw-search-results-grid');
+    const statusText = document.getElementById('sw-search-status-text');
+
+    // Switch to search tab automatically
+    searchTab?.click();
+
+    if (!resultsGrid) return;
+
+    resultsGrid.innerHTML = `
+      <div class="col-span-full py-16 flex flex-col items-center justify-center text-teal-400 space-y-3">
+        <i class="fa-solid fa-circle-notch fa-spin text-3xl"></i>
+        <p class="text-xs text-slate-300 font-mono">Gerçek API üzerinden "${query}" paketleri ve kararlı sürümler sorgulanıyor...</p>
+      </div>
+    `;
+
+    if (statusText) statusText.textContent = 'Sorgulanıyor...';
+
+    try {
+      const res = await fetch(`/api/packages/search?q=${encodeURIComponent(query)}`);
+      const data = await res.json();
+
+      if (!data.success || !data.results || data.results.length === 0) {
+        resultsGrid.innerHTML = `
+          <div class="col-span-full py-12 flex flex-col items-center justify-center text-slate-400 text-center space-y-2">
+            <i class="fa-solid fa-triangle-exclamation text-3xl text-amber-500"></i>
+            <p class="text-xs font-semibold text-slate-200">"${query}" için paket bulunamadı.</p>
+            <p class="text-[11px] text-slate-500">Farklı bir paket veya kütüphane adı aramayı deneyin (örn: express, lodash, vlc, ffmpeg).</p>
+          </div>
+        `;
+        if (statusText) statusText.textContent = '0 sonuç';
+        return;
+      }
+
+      if (statusText) statusText.textContent = `${data.results.length} paket bulundu`;
+      resultsGrid.innerHTML = '';
+
+      data.results.forEach(pkg => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3.5 flex flex-col justify-between hover:border-teal-500/50 transition-all shadow-sm group';
+
+        const isNpm = pkg.type === 'npm';
+        const badgeColor = isNpm ? 'bg-emerald-950 text-emerald-300 border-emerald-800' : 'bg-sky-950 text-sky-300 border-sky-800';
+
+        card.innerHTML = `
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <div class="w-9 h-9 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center">
+                <i class="${pkg.icon || 'fa-solid fa-box'} text-lg ${pkg.color || 'text-teal-400'}"></i>
+              </div>
+              <div class="flex items-center space-x-1.5">
+                <span class="text-[9px] font-mono uppercase px-2 py-0.5 rounded-full border ${badgeColor}">
+                  ${pkg.type} v${pkg.version}
+                </span>
+              </div>
+            </div>
+
+            <h4 class="text-xs font-bold text-slate-100 group-hover:text-teal-300 transition-colors flex items-center justify-between">
+              <span class="truncate max-w-[170px]" title="${pkg.name}">${pkg.name}</span>
+              ${pkg.score ? `<span class="text-[10px] text-slate-500 font-normal">⭐ ${pkg.score}%</span>` : ''}
+            </h4>
+            
+            <p class="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-tight" title="${pkg.description}">
+              ${pkg.description || 'Açıklama mevcut değil.'}
+            </p>
+
+            ${pkg.author ? `<p class="text-[10px] text-slate-500 mt-1 truncate">Geliştirici: ${pkg.author}</p>` : ''}
+          </div>
+
+          <div class="mt-3.5 pt-2 border-t border-slate-800/80 flex items-center space-x-2">
+            <button class="pkg-install-btn flex-1 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-semibold transition-all flex items-center justify-center space-x-1.5 shadow" 
+              data-name="${pkg.name}" 
+              data-type="${pkg.type}" 
+              data-version="${pkg.version}" 
+              data-desc="${encodeURIComponent(pkg.description || '')}"
+              data-icon="${pkg.icon || ''}"
+              data-color="${pkg.color || ''}"
+              data-cmd="${pkg.cmd || ''}">
+              <i class="fa-solid fa-cloud-arrow-down text-xs"></i>
+              <span>İndir & Masaüstüne Ekle</span>
+            </button>
+            ${pkg.homepage ? `
+              <a href="${pkg.homepage}" target="_blank" rel="noopener noreferrer" class="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 rounded-lg text-xs transition-colors" title="Paket Resmi Sayfası">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i>
+              </a>
+            ` : ''}
+          </div>
+        `;
+
+        resultsGrid.appendChild(card);
+      });
+
+      // Bind install buttons
+      resultsGrid.querySelectorAll('.pkg-install-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const name = btn.getAttribute('data-name');
+          const type = btn.getAttribute('data-type');
+          const version = btn.getAttribute('data-version');
+          const desc = decodeURIComponent(btn.getAttribute('data-desc') || '');
+          const icon = btn.getAttribute('data-icon');
+          const color = btn.getAttribute('data-color');
+          const cmd = btn.getAttribute('data-cmd');
+
+          btn.disabled = true;
+          btn.innerHTML = `<i class="fa-solid fa-circle-notch fa-spin text-xs"></i><span>İndiriliyor...</span>`;
+
+          await installRegistryPackage({ name, type, version, description: desc, icon, color, cmd });
+          
+          btn.disabled = false;
+          btn.innerHTML = `<i class="fa-solid fa-check text-xs"></i><span>Yüklendi</span>`;
+        });
+      });
+
+    } catch (err) {
+      resultsGrid.innerHTML = `
+        <div class="col-span-full py-12 flex flex-col items-center justify-center text-rose-400 text-center space-y-2">
+          <i class="fa-solid fa-circle-xmark text-3xl"></i>
+          <p class="text-xs font-semibold">Paket aranırken hata oluştu: ${err.message}</p>
+        </div>
+      `;
+    }
+  }
+
+  // Install package via server API
+  async function installRegistryPackage(pkgData) {
+    openApp('software');
+    switchToLogView();
+
+    const term = document.getElementById('sw-install-log-terminal');
+    if (term) {
+      term.textContent += `\n[CANLI İNDİRME] "${pkgData.name} v${pkgData.version}" (${pkgData.type.toUpperCase()}) en kararlı sürümü indiriliyor...\n`;
+    }
+
+    try {
+      const res = await fetch('/api/packages/install', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(pkgData)
+      });
+      const data = await res.json();
+      if (!data.success && term) {
+        term.textContent += `⚠️ Hata: ${data.error}\n`;
+      }
+    } catch (err) {
+      if (term) term.textContent += `⚠️ Bağlantı hatası: ${err.message}\n`;
+    }
+  }
+
+  // Fetch installed custom packages and append to Desktop & Start Menu
+  async function fetchDynamicDesktopApps() {
+    try {
+      const res = await fetch('/api/packages/installed');
+      const data = await res.json();
+      if (data.success && Array.isArray(data.apps)) {
+        dynamicDesktopApps = data.apps;
+        renderDynamicDesktopIcons();
+      }
+    } catch (e) {
+      console.warn('Failed to load dynamic desktop apps:', e);
+    }
+  }
+
+  function renderDynamicDesktopIcons() {
+    const desktopMain = document.getElementById('desktop');
+    if (!desktopMain) return;
+
+    // Remove existing dynamic icons
+    desktopMain.querySelectorAll('.dynamic-desktop-icon').forEach(el => el.remove());
+
+    dynamicDesktopApps.forEach(app => {
+      const iconEl = document.createElement('div');
+      iconEl.className = 'desktop-icon dynamic-desktop-icon pointer-events-auto group flex flex-col items-center cursor-pointer p-2 rounded-xl hover:bg-slate-800/40 transition-all duration-200';
+      iconEl.setAttribute('data-app-name', app.name);
+
+      iconEl.innerHTML = `
+        <div class="w-14 h-14 bg-slate-900/90 backdrop-blur-md border border-teal-600/40 rounded-2xl flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-teal-400 group-hover:shadow-teal-500/20 transition-all duration-200 relative">
+          <i class="${app.icon || 'fa-solid fa-box'} text-2xl ${app.color || 'text-teal-400'}"></i>
+          <span class="absolute -top-1 -right-1 w-3.5 h-3.5 bg-teal-500 rounded-full border-2 border-slate-900 flex items-center justify-center text-[8px] text-white">✓</span>
+        </div>
+        <span class="mt-2 text-xs text-center font-medium drop-shadow-md text-slate-200 group-hover:text-teal-300 truncate max-w-[80px]" title="${app.name}">
+          ${app.name}
+        </span>
+      `;
+
+      // Launch app when clicked
+      iconEl.addEventListener('click', () => {
+        openDynamicApp(app);
+      });
+
+      // Context menu to uninstall or info
+      iconEl.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (confirm(`"${app.name}" uygulamasını masaüstünden kaldırmak istiyor musunuz?`)) {
+          uninstallDynamicApp(app.name);
+        }
+      });
+
+      desktopMain.appendChild(iconEl);
+    });
+  }
+
+  function openDynamicApp(app) {
+    if (app.type === 'apt') {
+      openApp('terminal');
+      if (term) {
+        term.write(`\r\n\x1b[36m[WebOS]\x1b[0m ${app.name} başlatılıyor...\r\n`);
+        socket.emit('terminal-input', `${app.cmd || app.name}\n`);
+      }
+    } else {
+      openApp('terminal');
+      if (term) {
+        term.write(`\r\n\x1b[32m[Node.js Library]\x1b[0m ${app.name} (${app.version}) yüklü kütüphane bilgisi:\r\n`);
+        socket.emit('terminal-input', `npm list ${app.name}\n`);
+      }
+    }
+  }
+
+  async function uninstallDynamicApp(name) {
+    try {
+      const res = await fetch('/api/packages/uninstall', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name })
+      });
+      const data = await res.json();
+      if (data.success) {
+        dynamicDesktopApps = dynamicDesktopApps.filter(a => a.name !== name);
+        renderDynamicDesktopIcons();
+      }
+    } catch (e) {}
   }
 
   async function fetchInstalledApps() {

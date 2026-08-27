@@ -88,14 +88,26 @@ app.use('/novnc', createProxyMiddleware({
 const wsProxy = createProxyMiddleware({
   target: vncTarget,
   ws: true,
-  changeOrigin: true
+  changeOrigin: true,
+  logLevel: 'silent',
+  onError: (err, req, socket) => {
+    // Avoid crashing HTTP server on socket aborts
+    try {
+      if (socket && socket.destroy) socket.destroy();
+    } catch (e) {}
+  }
 });
 app.use('/websockify', wsProxy);
 app.use('/vnc', wsProxy);
 
 httpServer.on('upgrade', (req, socket, head) => {
-  if (req.url && (req.url.startsWith('/websockify') || req.url.startsWith('/novnc') || req.url.startsWith('/vnc'))) {
-    wsProxy.upgrade(req, socket, head);
+  const url = req.url || '';
+  if (url.startsWith('/websockify') || url.startsWith('/novnc') || url.startsWith('/vnc')) {
+    try {
+      wsProxy.upgrade(req, socket, head);
+    } catch (err) {
+      try { socket.destroy(); } catch (e) {}
+    }
   }
 });
 
@@ -833,6 +845,248 @@ const startChromeHandler = (req, res) => {
 app.post('/api/start-chrome', startChromeHandler);
 app.get('/api/start-chrome', startChromeHandler);
 app.post('/api/vds/launch-chrome', startChromeHandler);
+
+// ==========================================
+// REAL PACKAGE SEARCH & REPOSITORY REGISTRY APIS (NPM, APT, PyPI)
+// ==========================================
+
+// Global state file for dynamic desktop installed applications
+const INSTALLED_PACKAGES_FILE = path.join(WORKSPACE_ROOT, '.installed_apps.json');
+
+function getInstalledAppRegistry() {
+  try {
+    if (fs.existsSync(INSTALLED_PACKAGES_FILE)) {
+      return JSON.parse(fs.readFileSync(INSTALLED_PACKAGES_FILE, 'utf8'));
+    }
+  } catch (e) {}
+  return [];
+}
+
+function saveInstalledAppRegistry(apps) {
+  try {
+    fs.writeFileSync(INSTALLED_PACKAGES_FILE, JSON.stringify(apps, null, 2), 'utf8');
+  } catch (e) {
+    console.warn('Could not save installed apps file:', e.message);
+  }
+}
+
+// Search online packages via real live npm registry API with fallback to Debian APT packages
+app.get('/api/packages/search', async (req, res) => {
+  try {
+    const query = (req.query.q || req.query.query || '').trim();
+    const type = req.query.type || 'npm'; // 'npm' | 'apt' | 'all'
+
+    if (!query) {
+      return res.json({ success: true, results: [] });
+    }
+
+    const results = [];
+
+    // 1. NPM Registry Live Search (Official API: registry.npmjs.org)
+    try {
+      const npmUrl = `https://registry.npmjs.org/-/v1/search?text=${encodeURIComponent(query)}&size=15&quality=0.8&popularity=1.0`;
+      const npmRes = await fetch(npmUrl, {
+        headers: { 'User-Agent': 'WebOS-PackageManager/1.0' }
+      });
+
+      if (npmRes.ok) {
+        const npmData = await npmRes.json();
+        const objects = npmData.objects || [];
+        objects.forEach(item => {
+          const pkg = item.package;
+          results.push({
+            name: pkg.name,
+            version: pkg.version, // Stable latest release
+            description: pkg.description || 'JavaScript / Node.js kütüphanesi',
+            type: 'npm',
+            author: pkg.publisher?.username || pkg.author?.name || 'npm topluluğu',
+            date: pkg.date ? new Date(pkg.date).toLocaleDateString('tr-TR') : '',
+            homepage: pkg.links?.homepage || pkg.links?.npm || `https://www.npmjs.com/package/${pkg.name}`,
+            score: Math.round((item.score?.final || 0.8) * 100),
+            cmd: `npm install ${pkg.name}@${pkg.version}`,
+            icon: 'fa-brands fa-node-js',
+            color: 'text-emerald-400'
+          });
+        });
+      }
+    } catch (npmErr) {
+      console.warn('NPM search error:', npmErr.message);
+    }
+
+    // 2. Curated Linux APT / CLI system tools search matching query
+    const aptKnowledgeBase = [
+      { name: 'vlc', version: '3.0.18-stable', description: 'VLC Media Player - Güçlü video & ses oynatıcı', type: 'apt', category: 'Medya', icon: 'fa-solid fa-file-video', color: 'text-orange-400', cmd: 'vlc' },
+      { name: 'gimp', version: '2.10.34-stable', description: 'GIMP - Profesyonel görsel düzenleyici & tasarım aracı', type: 'apt', category: 'Grafik', icon: 'fa-solid fa-paintbrush', color: 'text-purple-400', cmd: 'gimp' },
+      { name: 'firefox', version: '124.0-stable', description: 'Mozilla Firefox Web Tarayıcı', type: 'apt', category: 'Internet', icon: 'fa-brands fa-firefox', color: 'text-orange-500', cmd: 'firefox' },
+      { name: 'htop', version: '3.2.2-stable', description: 'Htop - İnteraktif konsol işlem & kaynak monitörü', type: 'apt', category: 'Sistem', icon: 'fa-solid fa-microchip', color: 'text-emerald-400', cmd: 'htop' },
+      { name: 'neofetch', version: '7.1.0-stable', description: 'Neofetch - Donanım & işletim sistemi bilgi terminali', type: 'apt', category: 'Sistem', icon: 'fa-solid fa-terminal', color: 'text-cyan-400', cmd: 'neofetch' },
+      { name: 'ffmpeg', version: '6.0-stable', description: 'FFmpeg - Ses & video dönüştürme ve işleme kütüphanesi', type: 'apt', category: 'Medya', icon: 'fa-solid fa-film', color: 'text-red-400', cmd: 'ffmpeg' },
+      { name: 'curl', version: '8.4.0-stable', description: 'cURL - HTTP/HTTPS veri transfer komut satırı aracı', type: 'apt', category: 'Ağ', icon: 'fa-solid fa-network-wired', color: 'text-blue-400', cmd: 'curl' },
+      { name: 'git', version: '2.40.1-stable', description: 'Git - Dağıtık sürüm kontrol sistemi', type: 'apt', category: 'Geliştirici', icon: 'fa-brands fa-git-alt', color: 'text-rose-500', cmd: 'git' },
+      { name: 'python3', version: '3.11.6-stable', description: 'Python 3 Programlama Dili ve Çalışma Ortamı', type: 'apt', category: 'Geliştirici', icon: 'fa-brands fa-python', color: 'text-yellow-400', cmd: 'python3' },
+      { name: 'nano', version: '7.2-stable', description: 'GNU Nano - Terminal içi kullanımı kolay metin editörü', type: 'apt', category: 'Editör', icon: 'fa-solid fa-file-lines', color: 'text-teal-400', cmd: 'nano' },
+      { name: 'tree', version: '2.1.0-stable', description: 'Tree - Dizin yapısını ağaç görünümünde listeleyici', type: 'apt', category: 'Sistem', icon: 'fa-solid fa-folder-tree', color: 'text-emerald-300', cmd: 'tree' },
+      { name: 'tmux', version: '3.3a-stable', description: 'tmux - Terminal çoklayıcı & oturum yöneticisi', type: 'apt', category: 'Sistem', icon: 'fa-solid fa-table-columns', color: 'text-indigo-400', cmd: 'tmux' },
+      { name: 'wget', version: '1.21.4-stable', description: 'Wget - İnternetten dosya indirme aracı', type: 'apt', category: 'Ağ', icon: 'fa-solid fa-download', color: 'text-sky-400', cmd: 'wget' },
+      { name: 'zip', version: '3.0-stable', description: 'Zip / Unzip - Dosya sıkıştırma ve arşiv yöneticisi', type: 'apt', category: 'Araçlar', icon: 'fa-solid fa-file-zipper', color: 'text-amber-400', cmd: 'zip' },
+      { name: 'jq', version: '1.6-stable', description: 'jq - Komut satırı JSON ayrıştırıcı ve biçimlendirici', type: 'apt', category: 'Geliştirici', icon: 'fa-solid fa-code', color: 'text-pink-400', cmd: 'jq' }
+    ];
+
+    const qLower = query.toLowerCase();
+    const matchedApt = aptKnowledgeBase.filter(item => 
+      item.name.toLowerCase().includes(qLower) || 
+      item.description.toLowerCase().includes(qLower)
+    );
+
+    matchedApt.forEach(item => {
+      // Prepend or add APT items
+      results.unshift({
+        name: item.name,
+        version: item.version,
+        description: item.description,
+        type: 'apt',
+        author: 'Debian / Ubuntu Stable Repositories',
+        category: item.category,
+        cmd: `apt-get install -y ${item.name}`,
+        icon: item.icon,
+        color: item.color,
+        score: 95
+      });
+    });
+
+    res.json({
+      success: true,
+      query,
+      count: results.length,
+      results
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Install package (NPM, APT or Custom) and register to WebOS Desktop dynamically
+app.post('/api/packages/install', async (req, res) => {
+  try {
+    const { name, type, version, cmd, description, icon, color } = req.body;
+
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Paket adı zorunludur.' });
+    }
+
+    const cleanName = name.trim();
+    const pkgType = type || 'npm';
+    let installCommand = '';
+
+    if (pkgType === 'npm') {
+      // Install real npm package with exact stable version
+      const versionSpec = version ? `@${version}` : '';
+      installCommand = `npm install ${cleanName}${versionSpec} --save`;
+    } else if (pkgType === 'apt') {
+      installCommand = `DEBIAN_FRONTEND=noninteractive apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ${cleanName}`;
+    } else {
+      installCommand = cmd || `npm install ${cleanName}`;
+    }
+
+    console.log(`📦 Starting installation [${pkgType}]: ${cleanName} (Cmd: ${installCommand})`);
+
+    // Stream logs to UI
+    io.emit('install-log', {
+      target: cleanName,
+      log: `\n=== [PAKET KURUCU] ${cleanName} (${pkgType.toUpperCase()}) Kurulumu Başlatılıyor... ===\nKomut: ${installCommand}\n\n`
+    });
+
+    const child = childSpawn('sh', ['-c', installCommand], {
+      cwd: WORKSPACE_ROOT,
+      env: { ...process.env, DEBIAN_FRONTEND: 'noninteractive' }
+    });
+
+    child.stdout.on('data', (data) => {
+      io.emit('install-log', { target: cleanName, log: data.toString() });
+    });
+
+    child.stderr.on('data', (data) => {
+      io.emit('install-log', { target: cleanName, log: data.toString() });
+    });
+
+    child.on('close', (code) => {
+      const isSuccess = code === 0;
+      console.log(`📦 Install exited with code ${code} for ${cleanName}`);
+
+      if (isSuccess) {
+        // Register to dynamic installed desktop apps
+        const currentList = getInstalledAppRegistry();
+        const existingIdx = currentList.findIndex(a => a.name.toLowerCase() === cleanName.toLowerCase());
+        
+        const newAppRecord = {
+          id: `app-${cleanName.replace(/[^a-zA-Z0-9_-]/g, '')}`,
+          name: cleanName,
+          version: version || 'latest-stable',
+          type: pkgType,
+          description: description || `${cleanName} kütüphanesi`,
+          icon: icon || (pkgType === 'npm' ? 'fa-brands fa-node-js' : 'fa-solid fa-box'),
+          color: color || (pkgType === 'npm' ? 'text-emerald-400' : 'text-teal-400'),
+          installedAt: Date.now(),
+          cmd: cleanName
+        };
+
+        if (existingIdx >= 0) {
+          currentList[existingIdx] = newAppRecord;
+        } else {
+          currentList.push(newAppRecord);
+        }
+
+        saveInstalledAppRegistry(currentList);
+
+        // Broadcast to clients to add app to desktop and start menu
+        io.emit('app-installed', newAppRecord);
+      }
+
+      io.emit('install-complete', {
+        target: cleanName,
+        success: isSuccess,
+        code,
+        message: isSuccess ? `"${cleanName}" başarıyla kuruldu ve masaüstüne eklendi!` : `Kurulum hatası (Kod: ${code})`
+      });
+    });
+
+    res.json({
+      success: true,
+      message: `"${cleanName}" için kurulum süreci başlatıldı.`,
+      packageName: cleanName
+    });
+
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Dynamic Desktop & Installed Apps list API
+app.get('/api/packages/installed', (req, res) => {
+  try {
+    const list = getInstalledAppRegistry();
+    res.json({ success: true, apps: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Remove installed dynamic app
+app.post('/api/packages/uninstall', (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ success: false, error: 'Paket adı gerekli.' });
+
+    let list = getInstalledAppRegistry();
+    list = list.filter(a => a.name.toLowerCase() !== name.toLowerCase());
+    saveInstalledAppRegistry(list);
+
+    io.emit('app-uninstalled', { name });
+    res.json({ success: true, message: `"${name}" masaüstünden kaldırıldı.` });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Install Linux application via apt-get or dpkg with real-time Socket.io log streaming
 const installLinuxHandler = (req, res) => {
