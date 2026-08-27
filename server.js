@@ -50,48 +50,23 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 // ==========================================
 const vncTarget = process.env.VNC_TARGET || 'http://127.0.0.1:6080';
 
-// Proxy static assets & HTML5 interface of noVNC
-app.use('/novnc', createProxyMiddleware({
-  target: vncTarget,
-  changeOrigin: true,
-  pathRewrite: { '^/novnc': '' },
-  ws: true,
-  onError: (err, req, res) => {
-    if (res.headersSent) return;
-    res.status(502).send(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="utf-8">
-        <style>
-          body { background: #0f172a; color: #f8fafc; font-family: system-ui, sans-serif; height: 100vh; margin: 0; display: flex; align-items: center; justify-content: center; text-align: center; }
-          .card { background: rgba(30, 41, 59, 0.8); border: 1px solid rgba(51, 65, 85, 0.8); border-radius: 1rem; padding: 2.5rem; max-width: 480px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); }
-          h2 { color: #f43f5e; margin-top: 0; font-size: 1.25rem; }
-          p { color: #94a3b8; font-size: 0.875rem; line-height: 1.5; }
-          button { margin-top: 1.5rem; padding: 0.75rem 1.5rem; background: #0284c7; color: white; border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-          button:hover { background: #0369a1; }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <h2>🖥️ VDS Ekran Sunucusu Bekleniyor...</h2>
-          <p>Xvfb, XFCE masaüstü ve noVNC (websockify) grafik motoruna şu anda bağlanılamadı. Docker konteyneriniz başlatıldığında ekran otomatik aktifleşecektir.</p>
-          <button onclick="location.reload()">Sayfayı Yenile</button>
-        </div>
-      </body>
-      </html>
-    `);
-  }
-}));
+// Serve static frontend files from 'public' directory first (includes /novnc/vnc.html)
+const publicDir = path.join(__dirname, 'public');
+app.use(express.static(publicDir));
 
-// Proxy WebSocket stream for VNC
+// Serve local noVNC library package statically for zero-CDN local/offline & preview compatibility
+const novncLibPath = path.join(__dirname, 'node_modules/@novnc/novnc');
+if (fs.existsSync(novncLibPath)) {
+  app.use('/vendor/novnc', express.static(novncLibPath));
+}
+
+// Proxy WebSocket stream for VNC (websockify / rfb)
 const wsProxy = createProxyMiddleware({
   target: vncTarget,
   ws: true,
   changeOrigin: true,
   logLevel: 'silent',
   onError: (err, req, socket) => {
-    // Avoid crashing HTTP server on socket aborts
     try {
       if (socket && socket.destroy) socket.destroy();
     } catch (e) {}
@@ -102,7 +77,7 @@ app.use('/vnc', wsProxy);
 
 httpServer.on('upgrade', (req, socket, head) => {
   const url = req.url || '';
-  if (url.startsWith('/websockify') || url.startsWith('/novnc') || url.startsWith('/vnc')) {
+  if (url.startsWith('/websockify') || url.startsWith('/vnc')) {
     try {
       wsProxy.upgrade(req, socket, head);
     } catch (err) {
@@ -110,16 +85,6 @@ httpServer.on('upgrade', (req, socket, head) => {
     }
   }
 });
-
-// Serve static frontend files from 'public' directory
-const publicDir = path.join(__dirname, 'public');
-app.use(express.static(publicDir));
-
-// Serve local noVNC library package statically for zero-CDN local/offline & preview compatibility
-const novncLibPath = path.join(__dirname, 'node_modules/@novnc/novnc');
-if (fs.existsSync(novncLibPath)) {
-  app.use('/vendor/novnc', express.static(novncLibPath));
-}
 
 // Auto-start VNC background display processes if binaries exist
 function ensureVncServices() {
@@ -159,6 +124,22 @@ function ensureVncServices() {
 }
 
 ensureVncServices();
+
+// API to trigger VNC background services startup
+app.post('/api/vds/start-display', (req, res) => {
+  try {
+    ensureVncServices();
+    
+    // Check if tools need apt-get install
+    childExec('which Xvfb || (apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y xvfb x11vnc websockify)', (err) => {
+      if (!err) ensureVncServices();
+    });
+
+    res.json({ success: true, message: 'VDS X11 ve VNC ekran servisi başlatma süreci tetiklendi.' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // API to check VNC server availability
 app.get('/api/vnc-status', (req, res) => {
