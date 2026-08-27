@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: webos-vds-cloud
+    env: docker
+    dockerfilePath: Dockerfile
+    plan: free
+    region: frankfurt
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DISPLAY
+        value: ":99"
+      - key: NODE_ENV
+        value: production

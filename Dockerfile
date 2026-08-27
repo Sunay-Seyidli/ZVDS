@@ -1,5 +1,5 @@
 # Multi-stage production Dockerfile for WebOS Cloud System VDS Container
-# Features: XFCE Desktop, noVNC / websockify HTML5 streaming, Google Chrome, Wine (.exe), Node.js 20
+# Features: XFCE Desktop, noVNC / websockify HTML5 streaming, Google Chrome, Java 8/17 (TLauncher/Minecraft), Wine (.exe), Node.js 20
 
 FROM ubuntu:22.04
 
@@ -9,7 +9,7 @@ ENV RESOLUTION=1280x720x24
 ENV PORT=3000
 ENV NODE_ENV=production
 
-# 1. Base System Packages & Build Tools
+# 1. Base System Packages, Networking, Java, X11, noVNC & Build Tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     gnupg \
@@ -20,6 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     procps \
     htop \
+    nano \
+    zip \
+    unzip \
     iputils-ping \
     traceroute \
     net-tools \
@@ -40,6 +43,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     sudo \
     dpkg \
     apt-utils \
+    openjdk-8-jre \
+    openjdk-17-jre \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. Install Node.js 20 LTS
@@ -48,8 +53,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. Install Official Google Chrome Stable
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
+RUN mkdir -p /etc/apt/keyrings \
+    && wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor -o /etc/apt/keyrings/google-chrome.gpg \
+    && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/google-chrome.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
     && apt-get update \
     && apt-get install -y google-chrome-stable \
     && rm -rf /var/lib/apt/lists/*

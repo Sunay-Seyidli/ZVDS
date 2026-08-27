@@ -16,13 +16,14 @@ const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Import node-pty dynamically or handle fallback
+// Import node-pty dynamically or gracefully handle child_process fallback
 let ptyModule = null;
 try {
   ptyModule = require('node-pty');
-  console.log('✅ node-pty loaded successfully.');
+  console.log('✅ Native PTY engine loaded.');
 } catch (err) {
-  console.warn('⚠️ node-pty could not be loaded, using child_process fallback:', err.message);
+  // Graceful fallback to built-in child_process terminal emulator (used in cloud/sandbox environments)
+  ptyModule = null;
 }
 
 const app = express();
@@ -534,9 +535,9 @@ app.get('/api/fs/download', (req, res) => {
 // ==========================================
 
 // Launch Google Chrome inside VDS Display (:99)
-app.post('/api/vds/launch-chrome', (req, res) => {
+const launchChromeHandler = (req, res) => {
   try {
-    const url = req.body?.url || 'https://www.google.com';
+    const url = req.body?.url || req.query?.url || 'https://www.google.com';
     const display = process.env.DISPLAY || ':99';
 
     // Command to launch Google Chrome on display :99
@@ -555,7 +556,10 @@ app.post('/api/vds/launch-chrome', (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
-});
+};
+
+app.post('/api/vds/launch-chrome', launchChromeHandler);
+app.post('/api/start-chrome', launchChromeHandler);
 
 // ==========================================
 // DIRECT TRANSPARENT WEB & GOOGLE PROXY ENGINE

@@ -1520,6 +1520,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const iframeEl = document.getElementById('chrome-iframe');
     const canvasEl = document.getElementById('chrome-vnc-canvas');
     const chromeUrlInput = document.getElementById('chrome-url-input');
+    const modeTextEl = document.getElementById('chrome-mode-text');
     if (!container) return;
 
     const targetUrl = resolveTargetUrl(initialUrl || chromeUrlInput?.value || 'https://www.google.com');
@@ -1536,17 +1537,18 @@ document.addEventListener('DOMContentLoaded', () => {
         iframeEl.src = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
       }
       if (statusEl) statusEl.classList.add('hidden');
+      if (modeTextEl) modeTextEl.textContent = 'Web Proxy Modu';
     };
 
     if (statusEl) {
       statusEl.classList.remove('hidden');
       statusEl.innerHTML = `
         <div class="w-10 h-10 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mb-3"></div>
-        <p class="text-xs font-medium text-slate-300">Web Tarayıcısı Açılıyor...</p>
+        <p class="text-xs font-medium text-slate-300">VDS Masaüstü ve Chrome Açılıyor...</p>
       `;
     }
 
-    // Inform backend
+    // Inform backend to start Chrome on Display :99
     try {
       fetch('/api/start-chrome', {
         method: 'POST',
@@ -1570,54 +1572,22 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // VNC server active -> Attempt RFB stream connection
-    if (iframeEl) iframeEl.classList.add('hidden');
-    if (canvasEl) canvasEl.classList.remove('hidden');
-
-    let RFB = null;
-    try {
-      RFB = await loadRFBLibrary();
-    } catch (e) {}
-
-    if (!RFB) {
-      loadWebIframeMode();
-      return;
-    }
-
-    if (rfbInstance) {
+    // In Docker VDS with noVNC: use direct noVNC web client via iframe or RFB canvas
+    if (modeTextEl) modeTextEl.textContent = 'VDS Canlı Ekran';
+    
+    // Direct noVNC embedded player is the most reliable across all browsers
+    if (iframeEl) {
+      iframeEl.classList.remove('hidden');
+      if (canvasEl) canvasEl.classList.add('hidden');
+      const novncUrl = `/novnc/vnc.html?autoconnect=true&resize=scale&quality=8&compression=2`;
+      if (iframeEl.src.indexOf('/novnc/vnc.html') === -1) {
+        iframeEl.src = novncUrl;
+      }
       if (statusEl) statusEl.classList.add('hidden');
       return;
     }
 
-    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}/vnc`;
-
-    try {
-      rfbInstance = new RFB(container, wsUrl, {
-        credentials: { password: '' }
-      });
-
-      rfbInstance.scaleViewport = true;
-      rfbInstance.resizeSession = false;
-      rfbInstance.clipToWindow = true;
-
-      rfbInstance.addEventListener('connect', () => {
-        if (statusEl) statusEl.classList.add('hidden');
-      });
-
-      rfbInstance.addEventListener('disconnect', (e) => {
-        rfbInstance = null;
-        loadWebIframeMode();
-      });
-
-      rfbInstance.addEventListener('credentialsrequired', () => {
-        rfbInstance.sendCredentials({ password: '' });
-      });
-
-    } catch (err) {
-      rfbInstance = null;
-      loadWebIframeMode();
-    }
+    loadWebIframeMode();
   }
 
   function navigateChrome(explicitUrl) {
@@ -1630,12 +1600,51 @@ document.addEventListener('DOMContentLoaded', () => {
       chromeUrlInput.value = targetUrl;
     }
 
-    if (iframeEl && !iframeEl.classList.contains('hidden')) {
+    // Launch URL on container Chrome
+    fetch('/api/start-chrome', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: targetUrl })
+    }).catch(() => {});
+
+    if (iframeEl && !iframeEl.classList.contains('hidden') && iframeEl.src.indexOf('/novnc/') === -1) {
       iframeEl.src = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
     } else {
       initChromeVNC(targetUrl);
     }
   }
+
+  // Switch between VDS Desktop noVNC mode and Web Proxy mode
+  document.getElementById('chrome-btn-switch-vds')?.addEventListener('click', () => {
+    const iframeEl = document.getElementById('chrome-iframe');
+    const chromeUrlInput = document.getElementById('chrome-url-input');
+    const modeTextEl = document.getElementById('chrome-mode-text');
+    const targetUrl = resolveTargetUrl(chromeUrlInput?.value || 'https://www.google.com');
+
+    if (!iframeEl) return;
+
+    if (iframeEl.src.indexOf('/novnc/') !== -1) {
+      // Switch to Web Proxy Mode
+      iframeEl.src = `/api/proxy?url=${encodeURIComponent(targetUrl)}`;
+      if (modeTextEl) modeTextEl.textContent = 'Web Proxy';
+    } else {
+      // Switch to VDS noVNC Live Desktop Mode
+      iframeEl.src = `/novnc/vnc.html?autoconnect=true&resize=scale&quality=8&compression=2`;
+      if (modeTextEl) modeTextEl.textContent = 'VDS Canlı Ekran';
+      fetch('/api/start-chrome', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: targetUrl })
+      }).catch(() => {});
+    }
+  });
+
+  // Open in new tab (External browser)
+  document.getElementById('chrome-btn-external')?.addEventListener('click', () => {
+    const chromeUrlInput = document.getElementById('chrome-url-input');
+    const targetUrl = resolveTargetUrl(chromeUrlInput?.value || 'https://www.google.com');
+    window.open(targetUrl, '_blank', 'noopener,noreferrer');
+  });
 
   document.getElementById('chrome-btn-go')?.addEventListener('click', () => navigateChrome());
   document.getElementById('chrome-url-input')?.addEventListener('keydown', (e) => {
