@@ -20,6 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     procps \
     htop \
+    iputils-ping \
+    traceroute \
+    net-tools \
+    dnsutils \
+    iproute2 \
     supervisor \
     xvfb \
     x11vnc \

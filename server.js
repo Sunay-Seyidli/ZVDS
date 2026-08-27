@@ -560,7 +560,7 @@ app.post('/api/vds/launch-chrome', (req, res) => {
 // ==========================================
 // WEB BROWSER PROXY ENGINE
 // ==========================================
-app.get('/api/browser/proxy', async (req, res) => {
+const handleBrowserProxy = async (req, res) => {
   try {
     let targetUrl = req.query.url;
     if (!targetUrl) {
@@ -658,7 +658,10 @@ app.get('/api/browser/proxy', async (req, res) => {
       </html>
     `);
   }
-});
+};
+
+app.get('/api/browser/proxy', handleBrowserProxy);
+app.get('/api/proxy', handleBrowserProxy);
 
 // Launch Windows .exe application using Wine inside VDS Display (:99)
 const runWineExeHandler = (req, res) => {
