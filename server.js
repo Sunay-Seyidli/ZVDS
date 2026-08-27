@@ -558,262 +558,25 @@ app.post('/api/vds/launch-chrome', (req, res) => {
 });
 
 // ==========================================
-// WEB BROWSER PROXY & GOOGLE SEARCH ENGINE
+// DIRECT TRANSPARENT WEB & GOOGLE PROXY ENGINE
 // ==========================================
-const renderGoogleSearchUI = (query = '', results = [], errorMsg = null) => {
-  const safeQuery = (query || '').replace(/"/g, '&quot;');
-  
-  const resultsHtml = results.length > 0
-    ? results.map(r => {
-        const displayUrl = r.url ? (r.url.replace(/^https?:\/\//, '').split('/')[0] + (r.url.split('/')[1] ? ' › ' + r.url.split('/').slice(3, 5).join(' › ') : '')) : '';
-        return `
-          <div class="result-item">
-            <div class="result-cite">
-              <span class="result-favicon-box">🌐</span>
-              <span class="result-url-text">${displayUrl}</span>
-            </div>
-            <a href="/api/proxy?url=${encodeURIComponent(r.url)}" class="result-title">${r.title}</a>
-            <div class="result-snippet">${r.snippet}</div>
-          </div>
-        `;
-      }).join('')
-    : (query
-        ? `<div class="no-results">
-            <h3>"${safeQuery}" için sonuç bulunamadı.</h3>
-            <p>Yazımı kontrol edin veya farklı anahtar kelimeler deneyin.</p>
-           </div>`
-        : '');
-
-  return `
-    <!DOCTYPE html>
-    <html lang="tr">
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1">
-      <title>${query ? safeQuery + ' - Google Arama' : 'Google'}</title>
-      <style>
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; background: #202124; color: #e8eaed; min-height: 100vh; display: flex; flex-direction: column; }
-        a { color: #8ab4f8; text-decoration: none; }
-        a:hover { text-decoration: underline; }
-        
-        /* Top Navigation Header */
-        .g-header { display: flex; justify-content: flex-end; align-items: center; padding: 1rem 1.5rem; gap: 1rem; font-size: 13px; }
-        .g-header a { color: #e8eaed; text-decoration: none; }
-        .g-header a:hover { text-decoration: underline; }
-        
-        /* Home Mode */
-        .home-container { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 2rem 1rem 4rem; text-align: center; }
-        .g-logo { font-size: 4rem; font-weight: 700; letter-spacing: -1px; margin-bottom: 1.5rem; user-select: none; }
-        .g-blue { color: #4285f4; }
-        .g-red { color: #ea4335; }
-        .g-yellow { color: #fbbc05; }
-        .g-green { color: #34a853; }
-        
-        /* Search Box */
-        .search-box-wrap { width: 100%; max-width: 580px; position: relative; margin-bottom: 1.5rem; }
-        .search-form { display: flex; align-items: center; background: #303134; border: 1px solid #5f6368; border-radius: 24px; padding: 0.6rem 1rem; box-shadow: 0 1px 6px rgba(0,0,0,0.28); transition: all 0.2s ease; }
-        .search-form:hover, .search-form:focus-within { background: #303134; border-color: #8ab4f8; box-shadow: 0 2px 8px rgba(0,0,0,0.45); }
-        .search-icon { color: #9aa0a6; margin-right: 0.75rem; font-size: 1.1rem; }
-        .search-input { flex: 1; background: transparent; border: none; outline: none; color: #fff; font-size: 16px; }
-        .search-btn-submit { background: transparent; border: none; color: #8ab4f8; cursor: pointer; font-size: 14px; font-weight: 500; padding: 0.3rem 0.6rem; border-radius: 4px; }
-        .search-btn-submit:hover { background: rgba(138,180,248,0.1); }
-        
-        /* Home Shortcuts */
-        .shortcuts-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; width: 100%; max-width: 480px; margin-top: 1.5rem; }
-        .sc-card { display: flex; flex-direction: column; align-items: center; padding: 0.75rem 0.5rem; border-radius: 12px; background: #303134/40; border: 1px solid #3c4043; transition: all 0.2s ease; }
-        .sc-card:hover { background: #3c4043; transform: translateY(-2px); text-decoration: none; }
-        .sc-icon { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; margin-bottom: 0.5rem; background: #202124; }
-        .sc-name { font-size: 12px; color: #bdc1c6; }
-        
-        /* Results Mode */
-        .results-header { display: flex; align-items: center; padding: 1.25rem 2rem; border-bottom: 1px solid #3c4043; gap: 2rem; background: #202124; position: sticky; top: 0; z-index: 10; }
-        .res-logo { font-size: 1.6rem; font-weight: 700; text-decoration: none; }
-        .res-search-box { flex: 1; max-width: 640px; }
-        .results-body { flex: 1; max-width: 720px; padding: 1.5rem 2rem 3rem 2rem; }
-        .result-stats { font-size: 13px; color: #9aa0a6; margin-bottom: 1.5rem; }
-        .result-item { margin-bottom: 1.75rem; }
-        .result-cite { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.3rem; }
-        .result-favicon-box { font-size: 13px; }
-        .result-url-text { font-size: 12px; color: #bdc1c6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .result-title { font-size: 20px; color: #8ab4f8; line-height: 1.3; display: inline-block; margin-bottom: 0.35rem; }
-        .result-snippet { font-size: 14px; color: #bdc1c6; line-height: 1.58; word-wrap: break-word; }
-        .no-results { padding: 3rem 1rem; text-align: center; color: #9aa0a6; }
-        .no-results h3 { color: #e8eaed; margin-bottom: 0.5rem; }
-      </style>
-    </head>
-    <body>
-      ${!query ? `
-        <!-- GOOGLE HOME -->
-        <div class="g-header">
-          <a href="/api/proxy?url=https%3A%2F%2Fwww.google.com">Google</a>
-          <a href="/api/proxy?url=https%3A%2F%2Fgithub.com">GitHub</a>
-          <a href="/api/proxy?url=https%3A%2F%2Fwikipedia.org">Wikipedia</a>
-        </div>
-        <div class="home-container">
-          <div class="g-logo">
-            <span class="g-blue">G</span><span class="g-red">o</span><span class="g-yellow">o</span><span class="g-blue">g</span><span class="g-green">l</span><span class="g-red">e</span>
-          </div>
-          <div class="search-box-wrap">
-            <form class="search-form" method="GET" action="/api/proxy">
-              <span class="search-icon">🔍</span>
-              <input type="text" name="q" class="search-input" placeholder="Google'da arayın veya URL yazın..." autofocus autocomplete="off" />
-              <button type="submit" class="search-btn-submit">Ara</button>
-            </form>
-          </div>
-          <div class="shortcuts-grid">
-            <a href="/api/proxy?url=https%3A%2F%2Fwww.youtube.com" class="sc-card">
-              <div class="sc-icon">▶️</div>
-              <span class="sc-name">YouTube</span>
-            </a>
-            <a href="/api/proxy?url=https%3A%2F%2Fwikipedia.org" class="sc-card">
-              <div class="sc-icon">📚</div>
-              <span class="sc-name">Wikipedia</span>
-            </a>
-            <a href="/api/proxy?url=https%3A%2F%2Fgithub.com" class="sc-card">
-              <div class="sc-icon">🐙</div>
-              <span class="sc-name">GitHub</span>
-            </a>
-            <a href="/api/proxy?url=https%3A%2F%2Fnews.ycombinator.com" class="sc-card">
-              <div class="sc-icon">📰</div>
-              <span class="sc-name">Hacker News</span>
-            </a>
-          </div>
-        </div>
-      ` : `
-        <!-- GOOGLE SEARCH RESULTS -->
-        <div class="results-header">
-          <a href="/api/proxy?url=https%3A%2F%2Fwww.google.com" class="res-logo">
-            <span class="g-blue">G</span><span class="g-red">o</span><span class="g-yellow">o</span><span class="g-blue">g</span><span class="g-green">l</span><span class="g-red">e</span>
-          </a>
-          <div class="res-search-box">
-            <form class="search-form" method="GET" action="/api/proxy">
-              <span class="search-icon">🔍</span>
-              <input type="text" name="q" class="search-input" value="${safeQuery}" autocomplete="off" />
-              <button type="submit" class="search-btn-submit">Ara</button>
-            </form>
-          </div>
-        </div>
-        <div class="results-body">
-          <div class="result-stats">Yaklaşık ${results.length} sonuç bulundu</div>
-          ${resultsHtml}
-        </div>
-      `}
-      <script>
-        // Update URL bar in parent WebOS Chrome window
-        try {
-          window.parent.postMessage({
-            type: 'browser-url',
-            url: ${JSON.stringify(query ? `https://www.google.com/search?q=${encodeURIComponent(query)}` : 'https://www.google.com')}
-          }, '*');
-        } catch(e) {}
-      </script>
-    </body>
-    </html>
-  `;
-};
-
 const handleBrowserProxy = async (req, res) => {
   try {
-    let rawQuery = req.query.q || req.query.url || req.query.search;
+    let targetUrl = req.query.url || req.query.q || req.query.search;
 
-    if (!rawQuery || rawQuery.trim() === '') {
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.send(renderGoogleSearchUI(''));
+    if (!targetUrl || targetUrl.trim() === '') {
+      targetUrl = 'https://www.google.com';
     }
 
-    rawQuery = rawQuery.trim();
+    targetUrl = targetUrl.trim();
 
-    // Check if user is asking for Google homepage
-    if (
-      rawQuery === 'https://www.google.com' ||
-      rawQuery === 'https://www.google.com/' ||
-      rawQuery === 'http://www.google.com' ||
-      rawQuery === 'https://google.com' ||
-      rawQuery === 'google.com' ||
-      rawQuery === 'www.google.com'
-    ) {
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.send(renderGoogleSearchUI(''));
-    }
-
-    // Check if query is a Google Search URL e.g. https://www.google.com/search?q=...
-    if (rawQuery.includes('google.com/search')) {
-      try {
-        const u = new URL(rawQuery.startsWith('http') ? rawQuery : 'https://' + rawQuery);
-        const extractedQ = u.searchParams.get('q');
-        if (extractedQ) rawQuery = extractedQ;
-      } catch (e) {}
-    }
-
-    // Check if input is a direct URL or search term
-    const isDirectUrl = (rawQuery.startsWith('http://') || rawQuery.startsWith('https://')) ||
-      (rawQuery.includes('.') && !rawQuery.includes(' ') && !rawQuery.includes('?q='));
-
-    if (!isDirectUrl) {
-      // Execute live search query via DuckDuckGo HTML parser
-      const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(rawQuery)}`;
-      const searchResp = await fetch(searchUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-          'Accept-Language': 'tr-TR,tr;q=0.9,en-US;q=0.8,en;q=0.7'
-        }
-      });
-
-      const searchHtml = await searchResp.text();
-      const results = [];
-
-      // Extract results from DDG HTML
-      const resultBlocks = searchHtml.split(/<div[^>]*class=\"(?:result|results_links)[^>]*>/gi);
-      for (const block of resultBlocks) {
-        if (results.length >= 15) break;
-
-        // Title and URL extraction
-        const titleMatch = /<a[^>]*class=\"result__snippet\"[^>]*>([\s\S]*?)<\/a>/i.exec(block) ||
-                           /<a[^>]*class=\"result__url\"[^>]*href=\"([^\"]+)\"[^>]*>([\s\S]*?)<\/a>/i.exec(block);
-        const linkMatch = /<a[^>]*class=\"result__url\"[^>]*href=\"([^\"]+)\"/i.exec(block) ||
-                          /<a[^>]*class=\"result__title\"[^>]*href=\"([^\"]+)\"[^>]*>([\s\S]*?)<\/a>/i.exec(block);
-
-        let linkHref = linkMatch ? linkMatch[1] : null;
-        let title = linkMatch && linkMatch[2] ? linkMatch[2].replace(/<[^>]+>/g, '').trim() : '';
-
-        if (!title && titleMatch) {
-          title = (titleMatch[2] || titleMatch[1] || '').replace(/<[^>]+>/g, '').trim();
-        }
-
-        const snippetMatch = /<a[^>]*class=\"result__snippet\"[^>]*>([\s\S]*?)<\/a>/i.exec(block);
-        let snippet = snippetMatch ? snippetMatch[1].replace(/<[^>]+>/g, '').trim() : '';
-
-        if (linkHref) {
-          // Decode DuckDuckGo redirect link: //duckduckgo.com/l/?uddg=https%3A%2F%2F...
-          let realUrl = linkHref;
-          if (linkHref.includes('uddg=')) {
-            const matchUddg = /uddg=([^&]+)/.exec(linkHref);
-            if (matchUddg && matchUddg[1]) {
-              try { realUrl = decodeURIComponent(matchUddg[1]); } catch (e) {}
-            }
-          }
-          if (realUrl.startsWith('//')) realUrl = 'https:' + realUrl;
-
-          if (realUrl.startsWith('http') && !realUrl.includes('duckduckgo.com/y.js')) {
-            results.push({
-              title: title || realUrl,
-              url: realUrl,
-              snippet: snippet || 'Web sayfası içeriği için tıklayın.'
-            });
-          }
-        }
-      }
-
-      res.setHeader('Content-Type', 'text/html; charset=utf-8');
-      return res.send(renderGoogleSearchUI(rawQuery, results));
-    }
-
-    // Direct Website Proxy Mode
-    let targetUrl = rawQuery;
+    // If query is not a direct URL, format as Google search URL
     if (!targetUrl.startsWith('http://') && !targetUrl.startsWith('https://')) {
-      targetUrl = 'https://' + targetUrl;
+      if (targetUrl.includes('.') && !targetUrl.includes(' ')) {
+        targetUrl = 'https://' + targetUrl;
+      } else {
+        targetUrl = `https://www.google.com/search?q=${encodeURIComponent(targetUrl)}`;
+      }
     }
 
     const response = await fetch(targetUrl, {
@@ -827,7 +590,7 @@ const handleBrowserProxy = async (req, res) => {
 
     const contentType = response.headers.get('content-type') || 'text/html';
 
-    // Strip frame restrictions on response
+    // Remove frame-busting security headers from response so browser can render in WebOS
     res.removeHeader('X-Frame-Options');
     res.removeHeader('Content-Security-Policy');
     res.setHeader('Content-Security-Policy', "default-src * 'unsafe-inline' 'unsafe-eval' data: blob:; frame-ancestors *;");
@@ -846,12 +609,11 @@ const handleBrowserProxy = async (req, res) => {
       const baseUrl = `${parsedUrl.protocol}//${parsedUrl.host}${parsedUrl.pathname.substring(0, parsedUrl.pathname.lastIndexOf('/') + 1)}`;
       const baseTag = `<base href="${baseUrl}">`;
 
-      // Injected script to intercept navigation & keep clicks inside the proxy
+      // Injected script to keep navigation and form submissions within the WebOS Chrome proxy
       const interceptScript = `
         <script>
           (function() {
             try {
-              // Update URL in parent WebOS Chrome bar
               window.parent.postMessage({ type: 'browser-url', url: ${JSON.stringify(targetUrl)} }, '*');
             } catch(e) {}
 
@@ -859,7 +621,11 @@ const handleBrowserProxy = async (req, res) => {
               const a = e.target.closest('a');
               if (a && a.href && !a.href.startsWith('javascript:') && !a.href.startsWith('#')) {
                 e.preventDefault();
-                window.location.href = '/api/proxy?url=' + encodeURIComponent(a.href);
+                let fullUrl = a.href;
+                try {
+                  fullUrl = new URL(a.getAttribute('href') || a.href, ${JSON.stringify(targetUrl)}).href;
+                } catch(err) {}
+                window.location.href = '/api/proxy?url=' + encodeURIComponent(fullUrl);
               }
             }, true);
 
@@ -867,14 +633,15 @@ const handleBrowserProxy = async (req, res) => {
               const form = e.target.closest('form');
               if (form) {
                 e.preventDefault();
-                const action = form.action || window.location.href;
+                let action = form.getAttribute('action') || window.location.href;
+                try {
+                  action = new URL(action, ${JSON.stringify(targetUrl)}).href;
+                } catch(err) {}
                 const formData = new FormData(form);
                 const params = new URLSearchParams(formData);
                 const method = (form.method || 'GET').toUpperCase();
-                if (method === 'GET') {
-                  const sep = action.includes('?') ? '&' : '?';
-                  window.location.href = '/api/proxy?url=' + encodeURIComponent(action + sep + params.toString());
-                }
+                const sep = action.includes('?') ? '&' : '?';
+                window.location.href = '/api/proxy?url=' + encodeURIComponent(action + sep + params.toString());
               }
             }, true);
           })();
@@ -895,17 +662,19 @@ const handleBrowserProxy = async (req, res) => {
       return res.send(buffer);
     }
   } catch (err) {
+    console.error('⚠️ Proxy Error:', err.message);
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
     res.status(500).send(`
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="utf-8">
         <style>
-          body { background: #202124; color: #f8fafc; font-family: Roboto, sans-serif; padding: 2rem; margin: 0; }
-          .err-box { max-width: 500px; margin: 2rem auto; background: #303134; padding: 2rem; border-radius: 1rem; border: 1px solid #5f6368; }
+          body { background: #202124; color: #f8fafc; font-family: Roboto, sans-serif; padding: 2rem; margin: 0; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+          .err-box { max-width: 500px; width: 100%; background: #303134; padding: 2rem; border-radius: 1rem; border: 1px solid #5f6368; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
           h2 { color: #f28b82; margin-top: 0; font-size: 1.25rem; }
           p { color: #bdc1c6; font-size: 0.875rem; }
-          code { background: #202124; padding: 0.5rem 0.75rem; border-radius: 0.5rem; color: #8ab4f8; display: block; margin: 1rem 0; word-break: break-all; font-family: monospace; font-size: 0.8rem; }
+          code { background: #202124; padding: 0.5rem 0.75rem; border-radius: 0.5rem; color: #8ab4f8; display: block; margin: 1rem 0; word-break: break-all; font-family: monospace; font-size: 0.8rem; border: 1px solid #3c4043; }
           .btn-home { display: inline-block; background: #8ab4f8; color: #202124; padding: 0.5rem 1rem; border-radius: 4px; font-weight: 500; text-decoration: none; margin-top: 1rem; }
         </style>
       </head>
@@ -914,7 +683,7 @@ const handleBrowserProxy = async (req, res) => {
           <h2>⚠️ Web Sayfası Yüklenemedi</h2>
           <p>İstenen siteye bağlanırken bir sorun oluştu:</p>
           <code>${req.query.q || req.query.url || ''}</code>
-          <p>Hata Detayı: ${err.message}</p>
+          <p style="font-size: 0.8rem; color: #9aa0a6;">Hata: ${err.message}</p>
           <a href="/api/proxy?url=https%3A%2F%2Fwww.google.com" class="btn-home">Google Ana Sayfasına Dön</a>
         </div>
       </body>

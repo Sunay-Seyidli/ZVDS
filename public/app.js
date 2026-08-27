@@ -1510,8 +1510,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return 'https://' + url;
     }
 
-    // Otherwise treat as a search query
-    return `https://html.duckduckgo.com/html/?q=${encodeURIComponent(url)}`;
+    // Otherwise treat as a Google search query
+    return `https://www.google.com/search?q=${encodeURIComponent(url)}`;
   }
 
   async function initChromeVNC(initialUrl) {
