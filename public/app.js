@@ -1681,6 +1681,16 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
+  // Listen for navigation events from proxied iframe
+  window.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'browser-url' && event.data.url) {
+      const input = document.getElementById('chrome-url-input');
+      if (input) {
+        input.value = event.data.url;
+      }
+    }
+  });
+
   async function launchWineExe(filePath) {
     if (!filePath) return;
     try {
